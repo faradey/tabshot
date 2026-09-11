@@ -375,7 +375,10 @@ function pageClick(x, y) {
   el.dispatchEvent(new MouseEvent("mousemove", base));
   el.dispatchEvent(new PointerEvent("pointerdown", { ...ptr, button: 0, buttons: 1 }));
   el.dispatchEvent(new MouseEvent("mousedown", { ...base, button: 0, buttons: 1 }));
-  const focusable = el.closest("input, textarea, select, button, a, [tabindex], [contenteditable]") || el;
+  // A click on a field's padding or label should still land the caret in it.
+  const focusable = el.closest("input, textarea, select, button, a, [tabindex], [contenteditable]")
+    || el.querySelector("input, textarea, [contenteditable]")
+    || el;
   if (typeof focusable.focus === "function") focusable.focus({ preventScroll: true });
   el.dispatchEvent(new PointerEvent("pointerup", { ...ptr, button: 0, buttons: 0 }));
   el.dispatchEvent(new MouseEvent("mouseup", { ...base, button: 0, buttons: 0 }));
