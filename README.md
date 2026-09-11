@@ -57,6 +57,13 @@ Then in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** �
 the `extension/` directory. Open the extension's options, paste the token,
 list the allowed domains, Save (Chrome asks for host access to those domains).
 
+Then **share the tab**: open the page you want photographed and click the
+tabshot icon in the toolbar once — the badge turns to `on`. That click is
+Chrome's own `activeTab` grant, which is what `captureVisibleTab` demands; a
+host permission for the page is not enough. It lasts while the tab stays on
+that origin and dies with the tab or the browser, so after a restart it is one
+click again.
+
 ```sh
 tabshot status                          # extension: connected; allowed: ...
 tabshot status --domain admin.example.com
@@ -108,9 +115,10 @@ tabshot status  [--domain D]
 
 Trust is per machine: whoever can read `~/.config/tabshot/token` can drive
 the allow-listed tabs, which is the same set of people who can run the CLI.
-The daemon binds to loopback only. The extension asks for `tabs`,
-`scripting`, `storage`, `alarms`, `webNavigation` and host access to exactly
-the allow list; no `cookies`, no `debugger`, no `webRequest`, no `<all_urls>`.
+The daemon binds to loopback only. The extension asks for `activeTab`,
+`tabs`, `scripting`, `storage`, `alarms`, `webNavigation` and host access to
+exactly the allow list; no `cookies`, no `debugger`, no `webRequest`, no
+`<all_urls>`. A tab can be photographed only after you clicked the icon on it.
 `scripting` means the extension's own code can see the DOM of an allowed tab —
 it is that code, not the manifest, that refuses to pass any of it on, and it
 is short enough to read: `extension/background.js`.

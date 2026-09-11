@@ -60,6 +60,7 @@ function safeError(e) {
     return "no host access for that frame — add its domain to the allow list";
   }
   if (/No tab with id|No window with id/i.test(m)) return "the tab went away";
+  if (/activeTab/.test(m)) return "tab not shared — click the tabshot icon while that tab is in front, then retry";
   return m.replace(/https?:\/\/\S+/g, "<url>");
 }
 
@@ -70,7 +71,14 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 chrome.alarms.onAlarm.addListener(pollLoop);
 chrome.runtime.onMessage.addListener(() => { pollLoop(); });
-chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
+// Clicking the icon on a tab is what lets it be photographed: captureVisibleTab
+// accepts only activeTab or <all_urls>, and a host permission for the page is
+// not enough. The grant is Chrome's, per tab, and lasts while the tab stays
+// on that origin; the badge is the only record of it.
+chrome.action.onClicked.addListener(async (tab) => {
+  await chrome.action.setBadgeText({ tabId: tab.id, text: "on" });
+  await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#2a7" });
+});
 pollLoop();
 
 // ---------------------------------------------------------------- commands
