@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>tabshot</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; max-width: 640px; color: #222; }
+  label { display: block; font-weight: 600; margin-top: 16px; }
+  input, textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; margin-top: 4px; }
+  textarea { height: 140px; font-family: ui-monospace, monospace; }
+  button { margin-top: 16px; padding: 8px 16px; font: inherit; }
+  .hint { color: #666; font-size: 13px; }
+  #state { margin-top: 16px; padding: 8px 12px; border-radius: 6px; background: #f2f2f2; }
+</style>
+</head>
+<body>
+<h2>tabshot</h2>
+<p class="hint">The command line may ask for a screenshot of a tab on one of these
+domains and click, type, scroll or refresh in it. It never receives page text,
+DOM, cookies or URLs — only the picture and yes/no. Any domain not listed here
+is refused before a tab is even looked for.</p>
+
+<label>Allowed domains <span class="hint">(one per line; sub-domains of a listed domain are included)</span></label>
+<textarea id="domains" placeholder="admin.example.com&#10;app.example.net"></textarea>
+
+<label>Daemon port</label>
+<input id="port" type="number" min="1" max="65535">
+
+<label>Token <span class="hint">(from <code>tabshot token</code>)</span></label>
+<input id="token" type="password" autocomplete="off">
+
+<button id="save">Save</button>
+<div id="state"></div>
+<script src="options.js"></script>
+</body>
+</html>

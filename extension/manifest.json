@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "tabshot",
+  "version": "0.1.0",
+  "description": "Lets a local command line see pixels of one allow-listed tab and click, type and scroll in it. It never hands over text, DOM, cookies or URLs.",
+  "permissions": ["tabs", "scripting", "storage", "alarms", "webNavigation"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["*://*/*"],
+  "background": { "service_worker": "background.js" },
+  "options_page": "options.html",
+  "action": { "default_title": "tabshot options" }
+}
