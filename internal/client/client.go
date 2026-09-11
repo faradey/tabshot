@@ -81,6 +81,8 @@ func Run(cmd string, args []string) int {
 	out := fs.String("out", "", "shot: file to write (default tabshot-<time>.png)")
 	shot := fs.String("shot", "", "take a screenshot after the action and write it here")
 	zoom := fs.String("zoom", "", "shot: X,Y,W,H region of the viewport, saved at device resolution")
+	width := fs.Int("width", 800, "downscale the screenshot to this width; 0 or --full keeps the viewport size")
+	full := fs.Bool("full", false, "screenshot at viewport size (for pictures that will be published)")
 	at := fs.String("at", "", "type/scroll: X,Y point to act at")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -198,6 +200,9 @@ func Run(cmd string, args []string) int {
 	if *shot != "" {
 		body["shot"] = true
 	}
+	if *width > 0 && !*full {
+		body["width"] = *width
+	}
 
 	res, err := post(*port, body, time.Duration(*timeout*float64(time.Second))+5*time.Second)
 	if err != nil {
@@ -256,7 +261,10 @@ func Run(cmd string, args []string) int {
 		line := fmt.Sprintf("saved %s", file)
 		if res.Image != nil {
 			line += fmt.Sprintf(" %dx%d", res.Image.W, res.Image.H)
-			if res.Image.Scale != 1 {
+			switch {
+			case res.Image.Scale < 1:
+				line += fmt.Sprintf(" — downscaled: viewport X = imageX/%.4g, Y = imageY/%.4g", res.Image.Scale, res.Image.Scale)
+			case res.Image.Scale != 1:
 				line += fmt.Sprintf(" — zoom of %d,%d at %gx: viewport X = %d + imageX/%g, Y = %d + imageY/%g",
 					res.Image.Origin.X, res.Image.Origin.Y, res.Image.Scale,
 					res.Image.Origin.X, res.Image.Scale, res.Image.Origin.Y, res.Image.Scale)

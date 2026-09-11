@@ -156,7 +156,7 @@ async function handle(cmd, c) {
 
   if (cmd.action === "shot" || cmd.shot) {
     tab = await chrome.tabs.get(tab.id);
-    Object.assign(out, await capture(tab, cmd.zoom));
+    Object.assign(out, await capture(tab, cmd.zoom, cmd.width != null ? num(cmd.width) : 0));
   }
   return out;
 }
@@ -207,13 +207,19 @@ async function isolate(tab) {
 
 // ---------------------------------------------------------------- screenshot
 
-async function capture(tab, zoom) {
+async function capture(tab, zoom, width) {
   const vp = await exec(tab.id, 0, pageMeasure, []);
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
   const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
   const k = bmp.width / vp.w; // real capture scale (device pixel ratio, in practice)
 
   let sx = 0, sy = 0, sw = vp.w, sh = vp.h, ow = vp.w, oh = vp.h, scale = 1;
+  if (!zoom && width > 0 && width < vp.w) {
+    // Smaller than the viewport: fewer tokens per frame for whoever reads it.
+    scale = width / vp.w;
+    ow = width;
+    oh = Math.round(vp.h * scale);
+  }
   if (zoom) {
     sx = clamp(num(zoom.x), 0, vp.w - 1);
     sy = clamp(num(zoom.y), 0, vp.h - 1);
@@ -225,6 +231,8 @@ async function capture(tab, zoom) {
   }
   const canvas = new OffscreenCanvas(ow, oh);
   const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bmp, sx * k, sy * k, sw * k, sh * k, 0, 0, ow, oh);
   bmp.close();
   const blob = await canvas.convertToBlob({ type: "image/png" });

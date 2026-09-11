@@ -76,7 +76,7 @@ into it, and that needs host access to the iframe's origin too.
 ## Commands
 
 ```
-tabshot shot    --domain D [--out F] [--zoom X,Y,W,H]
+tabshot shot    --domain D [--out F] [--width N | --full] [--zoom X,Y,W,H]
 tabshot click   --domain D X Y
 tabshot type    --domain D [--at X,Y] "text"
 tabshot key     --domain D Enter|Tab|Escape|Backspace|ArrowDown|...
@@ -86,10 +86,16 @@ tabshot resize  --domain D W H
 tabshot status  [--domain D]
 ```
 
-- Coordinates are CSS pixels of the viewport, which is exactly the pixel
-  grid of an un-zoomed screenshot: what you see at `(640, 320)` in the PNG is
-  what `click 640 320` hits. On a HiDPI screen the capture is downscaled to
-  that grid before it leaves the extension.
+- Coordinates are CSS pixels of the viewport. A screenshot is **downscaled
+  to 800 px wide by default** — for a reader that pays per pixel (a model
+  does: roughly `width × height / 750` tokens per image) that is a quarter of
+  the cost of a 1600 px frame, and on a Shopify-admin-density page every
+  label was still legible at that width when this default was chosen; 640 px
+  was the edge. The output line says the factor: `viewport X = imageX/0.5`.
+  `--width N` picks another width, `--full` keeps the viewport size — use it
+  for pictures that will be published. On a HiDPI screen the capture is
+  brought down to the CSS grid first, so `--full` of a 1600×900 viewport is a
+  1600×900 file.
 - `--zoom` saves a region at the screen's native resolution, for reading
   small targets. The output line says how to map its pixels back.
 - `--shot F` on any action takes a screenshot after it, saving a round trip.

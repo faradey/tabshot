@@ -24,7 +24,7 @@ Every command below names a domain; the extension finds the tab itself and
 refuses a domain that is not on its allow list.
 
   tabshot status  [--domain D]                   extension connected? tab for D open?
-  tabshot shot    --domain D [--out F] [--zoom X,Y,W,H]
+  tabshot shot    --domain D [--out F] [--width N | --full] [--zoom X,Y,W,H]
   tabshot click   --domain D X Y                 left click at viewport point
   tabshot type    --domain D [--at X,Y] TEXT     insert text into the focused (or clicked) field
   tabshot key     --domain D Enter|Tab|Escape|Backspace|ArrowDown|...
@@ -34,7 +34,8 @@ refuses a domain that is not on its allow list.
 
 Common flags: --shot F (take a screenshot after the action), --timeout SEC.
 Flags go before positional arguments. Coordinates are CSS pixels of the
-viewport, which is exactly the pixel grid of an un-zoomed screenshot.
+viewport. Screenshots are downscaled to 800 px wide unless --width or --full
+says otherwise; the output line gives the factor to multiply image pixels by.
 `
 
 func main() {
