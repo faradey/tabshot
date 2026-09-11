@@ -98,7 +98,7 @@ async function handle(cmd, c) {
   }
   if (!tabs.length) return { ok: false, error: `no open tab for ${domain}` };
 
-  let tab = await isolate(pickTab(tabs));
+  let tab = await retry(() => isolate(pickTab(tabs)));
   const out = { ok: true };
 
   switch (cmd.action) {
@@ -159,6 +159,19 @@ async function handle(cmd, c) {
     Object.assign(out, await capture(tab, cmd.zoom));
   }
   return out;
+}
+
+// Chrome refuses tab and window edits for a moment after a drag or a window
+// move ("Tabs cannot be edited right now"); that is a wait, not a failure.
+async function retry(fn) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= 4 || !/cannot be edited right now/i.test(String(e && e.message))) throw e;
+      await sleep(500);
+    }
+  }
 }
 
 const num = (v) => {
