@@ -64,6 +64,13 @@ host permission for the page is not enough. It lasts while the tab stays on
 that origin and dies with the tab or the browser, so after a restart it is one
 click again.
 
+A link that opens a new tab (`target=_blank`) opens one nobody clicked on, and
+the grant cannot be copied to it. When that new tab is the **same origin** as
+the shared tab that opened it, the extension sends the shared tab there
+instead and closes the new one — the grant survives, the flow continues. Across
+origins (an account page opening the storefront) the new tab is left as it is
+and needs its own click, like any other.
+
 ```sh
 tabshot status                          # extension: connected; allowed: ...
 tabshot status --domain admin.example.com

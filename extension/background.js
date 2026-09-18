@@ -81,6 +81,41 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 pollLoop();
 
+// A link with target=_blank in a shared tab opens a tab nobody clicked the
+// icon on, and the grant cannot be copied: activeTab is Chrome's, per tab,
+// per gesture. What can be done is to keep the navigation in the tab that
+// holds the grant — when the new tab is the same origin as its opener, the
+// opener is sent to that URL and the new tab closed, and the grant survives
+// because it lasts while the tab stays on its origin. Across origins (a
+// store's "buy again" opening the storefront from an account page) the new
+// tab is left alone and needs a click like any other.
+chrome.tabs.onCreated.addListener((tab) => {
+  if (tab.openerTabId == null) return;
+  const opener = tab.openerTabId;
+  const foldIn = async (url) => {
+    try {
+      const badge = await chrome.action.getBadgeText({ tabId: opener });
+      if (badge !== "on") return false;
+      const openerTab = await chrome.tabs.get(opener);
+      if (!openerTab.url || new URL(openerTab.url).origin !== new URL(url).origin) return false;
+      await chrome.tabs.update(opener, { url, active: true });
+      await chrome.tabs.remove(tab.id);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const first = tab.pendingUrl || tab.url;
+  if (first && !first.startsWith("about:")) { foldIn(first); return; }
+  // Created blank and navigated a moment later: wait for the first real URL.
+  const onUpdated = (id, info) => {
+    if (id !== tab.id || !info.url || info.url.startsWith("about:")) return;
+    chrome.tabs.onUpdated.removeListener(onUpdated);
+    foldIn(info.url);
+  };
+  chrome.tabs.onUpdated.addListener(onUpdated);
+});
+
 // ---------------------------------------------------------------- commands
 
 async function handle(cmd, c) {
