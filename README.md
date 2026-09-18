@@ -113,10 +113,28 @@ tabshot status  [--domain D]
   debugger API, which is the access this tool exists to avoid.
 - The tab's window must not be minimised. It may be on another desktop or
   behind other windows.
-- Synthetic events: file pickers, native `<select>` popups on macOS, drag and
-  drop, and `alert()` dialogs cannot be driven.
+- Synthetic events: file pickers, drag and drop, and `alert()` dialogs cannot
+  be driven. A native `<select>` is the exception — `type` picks its option
+  by name, see above.
 - Sites that require trusted input for a particular control will ignore the
   click. Most web apps do not.
+- **Framework-controlled forms may not keep what `type` inserts.** Measured
+  2026-09-18 on a hosted checkout (React): the text shows in the field, and
+  the page's own validation still reports some of those fields empty — on
+  one form email, last name, street and city were "empty" while first name,
+  postal code and phone were accepted, the phone even reformatted. The
+  insert goes through `execCommand("insertText")` with a native-setter
+  fallback; the commit a keystroke produces — `input`, then `change` on
+  blur, and the framework's bookkeeping between them — is only partly
+  reproduced. Open. Until it is closed, text that has to survive validation
+  is typed by a person; what to try first is a `change` event and a real
+  blur after every insert.
+- **A point inside one of several sibling iframes is refused**
+  (`inside an iframe this extension cannot tell apart from its siblings`).
+  Measured on the same checkout: the card fields are side-by-side iframes,
+  so the page is usable up to the payment step and not past it. Open. The
+  frame's box is already known from the point; what is missing is naming
+  the frame — by its index among siblings, or a pattern on its `src`.
 - Anything on screen is in the picture — that is the point, and the reason
   the allow list is per domain.
 
