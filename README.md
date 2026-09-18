@@ -101,7 +101,10 @@ tabshot status  [--domain D]
 - `--shot F` on any action takes a screenshot after it, saving a round trip.
 - `resize` sets the **viewport** (not the window) to exactly `W×H`.
 - `type` inserts text into whatever has focus, or into what `--at` clicks
-  first. `key Enter` submits the focused form; `key Tab` moves focus.
+  first. On a `<select>` it picks the option the text names (label, then
+  value, exact before prefix) — keys cannot do that, because a native select's
+  type-ahead ignores synthetic events and its popup belongs to the OS.
+  `key Enter` submits the focused form; `key Tab` moves focus.
 - Flags come before positional arguments.
 
 ## Limits

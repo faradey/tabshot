@@ -122,7 +122,7 @@ async function handle(cmd, c) {
         frameId = await resolveFocus(tab.id);
       }
       const typed = await exec(tab.id, frameId, pageType, [String(cmd.text ?? "")]);
-      if (!typed) return { ok: false, error: "no editable element has focus — give --at X,Y" };
+      if (!typed) return { ok: false, error: "no editable element has focus (or no option of a select matches) — give --at X,Y" };
       await settle(tab.id);
       break;
     }
@@ -389,6 +389,24 @@ function pageClick(x, y) {
 function pageType(text) {
   const el = document.activeElement;
   if (!el) return false;
+  // A native <select> takes no text: synthetic key events never reach its
+  // type-ahead and its popup is a window of the OS, not of the page. So text
+  // typed at a select picks the option it names — by label first, then by
+  // value, exact before prefix — and announces it the way a user's pick is
+  // announced, `input` then `change`, which is what frameworks listen for.
+  if (el.tagName === "SELECT") {
+    const want = text.trim().toLowerCase();
+    const options = [...el.options];
+    const match = options.find((o) => o.text.trim().toLowerCase() === want)
+      || options.find((o) => o.value.trim().toLowerCase() === want)
+      || options.find((o) => o.text.trim().toLowerCase().startsWith(want));
+    if (!match) return false;
+    const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+    set.call(el, match.value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
   const editable = el.isContentEditable
     || (el.tagName === "TEXTAREA")
     || (el.tagName === "INPUT" && !/^(button|submit|reset|checkbox|radio|file|image|range|color)$/i.test(el.type));
