@@ -118,23 +118,21 @@ tabshot status  [--domain D]
   by name, see above.
 - Sites that require trusted input for a particular control will ignore the
   click. Most web apps do not.
-- **Framework-controlled forms may not keep what `type` inserts.** Measured
-  2026-09-18 on a hosted checkout (React): the text shows in the field, and
-  the page's own validation still reports some of those fields empty — on
-  one form email, last name, street and city were "empty" while first name,
-  postal code and phone were accepted, the phone even reformatted. The
-  insert goes through `execCommand("insertText")` with a native-setter
-  fallback; the commit a keystroke produces — `input`, then `change` on
-  blur, and the framework's bookkeeping between them — is only partly
-  reproduced. Open. Until it is closed, text that has to survive validation
-  is typed by a person; what to try first is a `change` event and a real
-  blur after every insert.
-- **A point inside one of several sibling iframes is refused**
-  (`inside an iframe this extension cannot tell apart from its siblings`).
-  Measured on the same checkout: the card fields are side-by-side iframes,
-  so the page is usable up to the payment step and not past it. Open. The
-  frame's box is already known from the point; what is missing is naming
-  the frame — by its index among siblings, or a pattern on its `src`.
+- **`type` announces a commit, not only an insert.** Measured 2026-09-18 on
+  a hosted checkout (React): with `input` alone the text showed in the field
+  while the page's validation reported it empty — email, last name, street
+  and city, while first name, postal code and phone were accepted. So every
+  insert is followed by `change`, `blur` and `focusout` as events, without
+  moving focus. A form that reads the field only on a real focus change is
+  still outside what synthetic events can do.
+- **Sibling iframes are told apart by position.** The card fields of a
+  hosted checkout are side-by-side iframes on one host; the parent reports
+  the clicked iframe's exact `src` and its index among the document's
+  same-host iframes, and the frame is found by the src when unique, else as
+  the n-th same-host frame in frame-id order — Chrome numbers frames as it
+  creates them, which for iframes written into the page together is DOM
+  order. A page that inserts such iframes out of order defeats this, and
+  then the old refusal returns.
 - Anything on screen is in the picture — that is the point, and the reason
   the allow list is per domain.
 

@@ -272,7 +272,7 @@ async function resolvePoint(tabId, x, y) {
   for (let depth = 0; depth < 6; depth++) {
     const hit = await exec(tabId, frameId, pageHitTest, [x, y]);
     if (!hit || hit.kind !== "frame") return { frameId, x, y };
-    frameId = await childFrame(tabId, frameId, hit.host);
+    frameId = await childFrame(tabId, frameId, hit);
     x -= hit.left;
     y -= hit.top;
   }
@@ -284,16 +284,31 @@ async function resolveFocus(tabId) {
   for (let depth = 0; depth < 6; depth++) {
     const f = await exec(tabId, frameId, pageFocusedFrame, []);
     if (!f) return frameId;
-    frameId = await childFrame(tabId, frameId, f.host);
+    frameId = await childFrame(tabId, frameId, f);
   }
   return frameId;
 }
 
-async function childFrame(tabId, parentId, host) {
+// Find the tab frame behind an iframe the parent described (the `describe`
+// inside pageHitTest). Three tries, from certain to heuristic: the exact src,
+// then the host when only one frame has it, then — sibling card fields, all
+// on one host — the n-th same-host frame in creation order, which is the
+// order Chrome hands out frame ids and, for iframes written into the page
+// together, the DOM order the parent counted in.
+async function childFrame(tabId, parentId, want) {
   const frames = (await chrome.webNavigation.getAllFrames({ tabId })) || [];
   const kids = frames.filter((f) => f.parentFrameId === parentId && f.url && !f.url.startsWith("about:"));
-  let match = kids.filter((f) => { try { return new URL(f.url).host === host; } catch { return false; } });
+  const hostOf = (u) => { try { return new URL(u).host; } catch { return ""; } };
+  if (want.url) {
+    const exact = kids.filter((f) => f.url === want.url);
+    if (exact.length === 1) return exact[0].frameId;
+  }
+  let match = kids.filter((f) => hostOf(f.url) === want.host);
   if (match.length === 0 && kids.length === 1) match = kids;
+  if (match.length > 1 && Number.isInteger(want.index) && want.index >= 0) {
+    match = [...match].sort((a, b) => a.frameId - b.frameId);
+    if (want.index < match.length) return match[want.index].frameId;
+  }
   if (match.length !== 1) throw new Error("the point is inside an iframe this extension cannot tell apart from its siblings");
   return match[0].frameId;
 }
@@ -342,24 +357,44 @@ function pageMeasure() {
   };
 }
 
+// The two page-side functions below each carry their own copy of
+// `describe`: executeScript ships one function and nothing it refers to.
+// What it returns is what childFrame() needs to find the iframe among the
+// tab's frames — the src, its host, and the iframe's position among the
+// document's iframes of the same host in DOM order, which is what tells
+// sibling card fields apart.
 function pageHitTest(x, y) {
+  const describe = (el) => {
+    let host = "";
+    let url = "";
+    try { url = new URL(el.src, location.href).href; host = new URL(url).host; } catch {}
+    const siblings = [...document.querySelectorAll("iframe, frame")].filter((f) => {
+      try { return new URL(f.src, location.href).host === host; } catch { return false; }
+    });
+    return { host, url, index: siblings.indexOf(el) };
+  };
   const el = document.elementFromPoint(x, y);
   if (!el) return { kind: "none" };
   if (el.tagName === "IFRAME" || el.tagName === "FRAME") {
     const r = el.getBoundingClientRect();
-    let host = "";
-    try { host = new URL(el.src, location.href).host; } catch {}
-    return { kind: "frame", host, left: r.left + el.clientLeft, top: r.top + el.clientTop };
+    return { kind: "frame", ...describe(el), left: r.left + el.clientLeft, top: r.top + el.clientTop };
   }
   return { kind: "el" };
 }
 
 function pageFocusedFrame() {
+  const describe = (el) => {
+    let host = "";
+    let url = "";
+    try { url = new URL(el.src, location.href).href; host = new URL(url).host; } catch {}
+    const siblings = [...document.querySelectorAll("iframe, frame")].filter((f) => {
+      try { return new URL(f.src, location.href).host === host; } catch { return false; }
+    });
+    return { host, url, index: siblings.indexOf(el) };
+  };
   const el = document.activeElement;
   if (el && (el.tagName === "IFRAME" || el.tagName === "FRAME")) {
-    let host = "";
-    try { host = new URL(el.src, location.href).host; } catch {}
-    return { host };
+    return describe(el);
   }
   return null;
 }
@@ -413,11 +448,21 @@ function pageType(text) {
   if (!editable) return false;
   // execCommand inserts through the editing pipeline, so frameworks that
   // listen for `input` (React included) see it as if typed.
-  if (document.execCommand("insertText", false, text)) return true;
-  const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-  const set = Object.getOwnPropertyDescriptor(proto, "value").set;
-  set.call(el, (el.value || "") + text);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
+  if (!document.execCommand("insertText", false, text)) {
+    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const set = Object.getOwnPropertyDescriptor(proto, "value").set;
+    set.call(el, (el.value || "") + text);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  // A keystroke's commit is more than `input`: forms that validate what they
+  // hold read the field on `change` and on the blur that follows, and a form
+  // built that way reported fields typed here as empty while showing the
+  // text (measured on a hosted checkout, 2026-09-18). So the commit is
+  // announced too — `change`, then `focusout`/`blur` as events only, so the
+  // caret stays where the next `key` expects it.
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.dispatchEvent(new FocusEvent("blur", { bubbles: false, composed: true }));
+  el.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
   return true;
 }
 
