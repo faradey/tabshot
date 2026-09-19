@@ -118,8 +118,16 @@ tabshot status  [--domain D]
 
 - Only what the viewport shows is captured. Full-page captures would need the
   debugger API, which is the access this tool exists to avoid.
-- The tab's window must not be minimised. It may be on another desktop or
-  behind other windows.
+- The tab's window must not be minimised, and must not be **completely**
+  covered by other windows either: Chrome stops painting a fully occluded
+  window, and `shot` then answers `Failed to capture tab: image readback
+  failed` while clicks and typing still land. Another desktop is fine;
+  partly visible is fine. Measured 2026-09-19 on macOS through a checkout.
+- **A shot can be a stale frame.** Same cause, other symptom: three shots
+  in a row showed a form with two fields empty while the page had them
+  filled and rates loaded — Chrome handed back the last frame it had
+  painted. If a picture contradicts the `ok` of the actions before it, make
+  the window visible and shoot again before acting on the picture.
 - Synthetic events: file pickers, drag and drop, and `alert()` dialogs cannot
   be driven. A native `<select>` is the exception — `type` picks its option
   by name, see above.
