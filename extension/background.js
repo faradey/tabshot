@@ -133,7 +133,7 @@ async function handle(cmd, c) {
   }
   if (!tabs.length) return { ok: false, error: `no open tab for ${domain}` };
 
-  let tab = await retry(() => isolate(pickTab(tabs)));
+  let tab = await retry(async () => isolate(pickTab(await sharedFirst(tabs))));
   const out = { ok: true };
 
   switch (cmd.action) {
@@ -217,6 +217,24 @@ const num = (v) => {
 
 function allowed(domain, list) {
   return list.some((d) => domain === d || domain.endsWith("." + d));
+}
+
+// Only a tab whose icon was clicked can be photographed, and the badge is the
+// record of that click. With several tabs open on one domain, picking by
+// recency alone chose a tab nobody shared — and isolate() then activated it,
+// making it the most recent, so every retry chose it again. The shared tabs
+// are the candidates; when none is shared the choice falls back to all of
+// them, and the capture answers "tab not shared", which is the truth.
+async function sharedFirst(tabs) {
+  const marked = [];
+  for (const t of tabs) {
+    try {
+      if ((await chrome.action.getBadgeText({ tabId: t.id })) === "on") marked.push(t);
+    } catch {
+      // the tab went away between the query and the look; not a candidate
+    }
+  }
+  return marked.length ? marked : tabs;
 }
 
 // The most recently used matching tab; the active one wins a tie.
