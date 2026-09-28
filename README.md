@@ -62,7 +62,14 @@ tabshot icon in the toolbar once — the badge turns to `on`. That click is
 Chrome's own `activeTab` grant, which is what `captureVisibleTab` demands; a
 host permission for the page is not enough. It lasts while the tab stays on
 that origin and dies with the tab or the browser, so after a restart it is one
-click again.
+click again. Reloading the extension ends every grant too.
+
+The extension records which origin each click was on. When the tab moves to
+another site (a back arrow that leaves the page, a login redirect) Chrome ends
+the grant, and the badge goes off with it instead of promising a capture that
+would fail. Commands act **only** on shared tabs: with none, they answer "tab
+not shared" and touch nothing — no tab is moved into its own window unless it
+is the one being photographed.
 
 A link that opens a new tab (`target=_blank`) opens one nobody clicked on, and
 the grant cannot be copied to it. When that new tab is the **same origin** as

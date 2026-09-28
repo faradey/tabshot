@@ -75,10 +75,56 @@ chrome.runtime.onMessage.addListener(() => { pollLoop(); });
 // accepts only activeTab or <all_urls>, and a host permission for the page is
 // not enough. The grant is Chrome's, per tab, and lasts while the tab stays
 // on that origin; the badge is the only record of it.
+//
+// The origin the grant was given on is recorded too (session storage, which an
+// extension reload clears exactly as it clears Chrome's grants), because the
+// badge cannot say it: when the tab moves to another origin Chrome revokes the
+// grant, and a badge left at "on" then promised a capture that failed.
 chrome.action.onClicked.addListener(async (tab) => {
+  await rememberShare(tab.id, tab.url);
   await chrome.action.setBadgeText({ tabId: tab.id, text: "on" });
   await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#2a7" });
 });
+
+// The grant ends when the tab leaves its origin or closes; so does the record.
+chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+  if (!info.url) return;
+  const shares = await loadShares();
+  const origin = shares[tabId];
+  if (origin === undefined || originOf(info.url) === origin) return;
+  delete shares[tabId];
+  await chrome.storage.session.set({ shares });
+  try {
+    await chrome.action.setBadgeText({ tabId, text: "" });
+  } catch {
+    // the tab went away meanwhile
+  }
+});
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const shares = await loadShares();
+  if (shares[tabId] === undefined) return;
+  delete shares[tabId];
+  await chrome.storage.session.set({ shares });
+});
+
+async function loadShares() {
+  const { shares } = await chrome.storage.session.get({ shares: {} });
+  return shares || {};
+}
+
+async function rememberShare(tabId, url) {
+  const shares = await loadShares();
+  shares[tabId] = originOf(url);
+  await chrome.storage.session.set({ shares });
+}
+
+function originOf(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
 pollLoop();
 
 // A link with target=_blank in a shared tab opens a tab nobody clicked the
@@ -94,10 +140,10 @@ chrome.tabs.onCreated.addListener((tab) => {
   const opener = tab.openerTabId;
   const foldIn = async (url) => {
     try {
-      const badge = await chrome.action.getBadgeText({ tabId: opener });
-      if (badge !== "on") return false;
+      const shares = await loadShares();
       const openerTab = await chrome.tabs.get(opener);
-      if (!openerTab.url || new URL(openerTab.url).origin !== new URL(url).origin) return false;
+      if (shares[opener] === undefined || shares[opener] !== originOf(openerTab.url || "")) return false;
+      if (originOf(openerTab.url || "") !== originOf(url)) return false;
       await chrome.tabs.update(opener, { url, active: true });
       await chrome.tabs.remove(tab.id);
       return true;
@@ -133,7 +179,12 @@ async function handle(cmd, c) {
   }
   if (!tabs.length) return { ok: false, error: `no open tab for ${domain}` };
 
-  let tab = await retry(async () => isolate(pickTab(await sharedFirst(tabs))));
+  const shared = await sharedTabs(tabs);
+  if (!shared.length) {
+    return { ok: false, error: `tab not shared — click the tabshot icon on the ${domain} tab (again if it moved to another site), then retry` };
+  }
+
+  let tab = await retry(async () => isolate(pickTab(shared)));
   const out = { ok: true };
 
   switch (cmd.action) {
@@ -219,22 +270,15 @@ function allowed(domain, list) {
   return list.some((d) => domain === d || domain.endsWith("." + d));
 }
 
-// Only a tab whose icon was clicked can be photographed, and the badge is the
-// record of that click. With several tabs open on one domain, picking by
-// recency alone chose a tab nobody shared — and isolate() then activated it,
-// making it the most recent, so every retry chose it again. The shared tabs
-// are the candidates; when none is shared the choice falls back to all of
-// them, and the capture answers "tab not shared", which is the truth.
-async function sharedFirst(tabs) {
-  const marked = [];
-  for (const t of tabs) {
-    try {
-      if ((await chrome.action.getBadgeText({ tabId: t.id })) === "on") marked.push(t);
-    } catch {
-      // the tab went away between the query and the look; not a candidate
-    }
-  }
-  return marked.length ? marked : tabs;
+// Only a tab whose icon was clicked, and which is still on the origin it was
+// clicked on, can be photographed. Those are the only candidates, and with none
+// the command stops before touching any window: falling back to the other tabs
+// used to send a tab nobody shared through isolate(), which moved it into a
+// window of its own and then failed the capture anyway — the owner's Partners
+// dashboard ended up in a separate window for nothing.
+async function sharedTabs(tabs) {
+  const shares = await loadShares();
+  return tabs.filter((t) => shares[t.id] !== undefined && shares[t.id] === originOf(t.url || ""));
 }
 
 // The most recently used matching tab; the active one wins a tie.
