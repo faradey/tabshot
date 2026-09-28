@@ -29,6 +29,16 @@ is refused before a tab is even looked for.</p>
 <label>Token <span class="hint">(from <code>tabshot token</code>)</span></label>
 <input id="token" type="password" autocomplete="off">
 
+<label><input id="noclick" type="checkbox" style="width:auto;margin-right:8px">Capture without a click</label>
+<p class="hint">Chrome photographs a tab only after its icon is clicked on it, and
+forgets that click when the tab moves to another site — even between two
+allowed domains. Turned on, this asks Chrome once for access to all sites
+(<code>&lt;all_urls&gt;</code>), and any tab on an allowed domain can then be
+photographed with no click. Chrome will list the extension as able to read and
+change data on all websites; what it acts on is still only the allow list
+above, checked by this extension's own code. Turn it off to give the access
+back.</p>
+
 <button id="save">Save</button>
 <div id="state"></div>
 <script src="options.js"></script>

@@ -168,8 +168,15 @@ Trust is per machine: whoever can read `~/.config/tabshot/token` can drive
 the allow-listed tabs, which is the same set of people who can run the CLI.
 The daemon binds to loopback only. The extension asks for `activeTab`,
 `tabs`, `scripting`, `storage`, `alarms`, `webNavigation` and host access to
-exactly the allow list; no `cookies`, no `debugger`, no `webRequest`, no
-`<all_urls>`. A tab can be photographed only after you clicked the icon on it.
+exactly the allow list; no `cookies`, no `debugger`, no `webRequest`. By
+default no `<all_urls>` either, and a tab can be photographed only after you
+clicked the icon on it. **"Capture without a click"** in the options is the
+one exception, and it is yours to switch: it asks Chrome for `<all_urls>` —
+the only other thing `captureVisibleTab` accepts — so any tab on an allowed
+domain can be photographed without a click, and a move between two allowed
+domains no longer ends it. Chrome then lists the extension as able to read and
+change data on all websites; what it acts on is still the allow list, checked
+by the extension's code rather than by Chrome. Unticking gives the access back.
 `scripting` means the extension's own code can see the DOM of an allowed tab —
 it is that code, not the manifest, that refuses to pass any of it on, and it
 is short enough to read: `extension/background.js`.

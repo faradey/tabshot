@@ -20,6 +20,7 @@ async function load() {
   $("domains").value = c.domains.join("\n");
   $("port").value = c.port;
   $("token").value = c.token;
+  $("noclick").checked = await chrome.permissions.contains({ origins: ["<all_urls>"] });
   const granted = await chrome.permissions.getAll();
   const missing = c.domains.filter((d) => !granted.origins.includes(`*://${d}/*`));
   let s = c.lastPoll ? `Last contact with the daemon: ${new Date(c.lastPoll).toLocaleTimeString()}.` : "Never reached the daemon yet.";
@@ -53,6 +54,26 @@ $("save").addEventListener("click", async () => {
   chrome.runtime.sendMessage({ type: "config-changed" }).catch(() => {});
   await load();
   $("state").textContent += " Saved.";
+});
+
+// The prompt must come from this click, so the toggle asks (or gives back) at
+// once rather than on Save.
+$("noclick").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  try {
+    if (on) {
+      const ok = await chrome.permissions.request({ origins: ["<all_urls>"] });
+      if (!ok) e.target.checked = false;
+    } else {
+      await chrome.permissions.remove({ origins: ["<all_urls>"] });
+    }
+  } catch (err) {
+    e.target.checked = !on;
+    $("state").textContent = `Could not change the access: ${err.message}`;
+    return;
+  }
+  await load();
+  $("state").textContent += e.target.checked ? " Capturing without a click." : " A click on the icon is needed again.";
 });
 
 load();

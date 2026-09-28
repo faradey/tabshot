@@ -5,7 +5,7 @@
   "description": "Lets a local command line see pixels of one allow-listed tab and click, type and scroll in it. It never hands over text, DOM, cookies or URLs.",
   "permissions": ["activeTab", "tabs", "scripting", "storage", "alarms", "webNavigation"],
   "host_permissions": ["http://127.0.0.1/*"],
-  "optional_host_permissions": ["*://*/*"],
+  "optional_host_permissions": ["*://*/*", "<all_urls>"],
   "background": { "service_worker": "background.js" },
   "options_page": "options.html",
   "action": { "default_title": "tabshot: share this tab" }

@@ -276,9 +276,16 @@ function allowed(domain, list) {
 // used to send a tab nobody shared through isolate(), which moved it into a
 // window of its own and then failed the capture anyway — the owner's Partners
 // dashboard ended up in a separate window for nothing.
+//
+// With "capture without a click" on (the <all_urls> permission, granted from
+// the options page), no click is needed: every tab on an allowed domain is a
+// candidate, clicked ones first, so a tab the owner pointed at still wins.
 async function sharedTabs(tabs) {
   const shares = await loadShares();
-  return tabs.filter((t) => shares[t.id] !== undefined && shares[t.id] === originOf(t.url || ""));
+  const clicked = tabs.filter((t) => shares[t.id] !== undefined && shares[t.id] === originOf(t.url || ""));
+  if (clicked.length) return clicked;
+  if (await chrome.permissions.contains({ origins: ["<all_urls>"] })) return tabs;
+  return [];
 }
 
 // The most recently used matching tab; the active one wins a tie.
