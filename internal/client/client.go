@@ -84,6 +84,7 @@ func Run(cmd string, args []string) int {
 	width := fs.Int("width", 800, "downscale the screenshot to this width; 0 or --full keeps the viewport size")
 	full := fs.Bool("full", false, "screenshot at viewport size (for pictures that will be published)")
 	at := fs.String("at", "", "type/scroll: X,Y point to act at")
+	replace := fs.Bool("replace", false, "type: replace the field's whole content instead of inserting at the caret")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -166,6 +167,9 @@ func Run(cmd string, args []string) int {
 			return 2
 		}
 		body["text"] = pos[0]
+		if *replace {
+			body["replace"] = true
+		}
 	case "key":
 		if !need(1) {
 			return 2

@@ -85,7 +85,7 @@ into it, and that needs host access to the iframe's origin too.
 ```
 tabshot shot    --domain D [--out F] [--width N | --full] [--zoom X,Y,W,H]
 tabshot click   --domain D X Y
-tabshot type    --domain D [--at X,Y] "text"
+tabshot type    --domain D [--at X,Y] [--replace] "text"
 tabshot key     --domain D Enter|Tab|Escape|Backspace|ArrowDown|...
 tabshot scroll  --domain D DX DY [--at X,Y]
 tabshot refresh --domain D
@@ -112,6 +112,10 @@ tabshot status  [--domain D]
   value, exact before prefix) — keys cannot do that, because a native select's
   type-ahead ignores synthetic events and its popup belongs to the OS.
   `key Enter` submits the focused form; `key Tab` moves focus.
+  `--replace` selects the field's whole content first, so the text replaces
+  it rather than landing at the caret — synthetic keys cannot select all, and
+  emptying a filled field one Backspace at a time from wherever the click left
+  the caret is not reliable.
 - Flags come before positional arguments.
 
 ## Limits

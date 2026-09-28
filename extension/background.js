@@ -156,7 +156,7 @@ async function handle(cmd, c) {
       } else {
         frameId = await resolveFocus(tab.id);
       }
-      const typed = await exec(tab.id, frameId, pageType, [String(cmd.text ?? "")]);
+      const typed = await exec(tab.id, frameId, pageType, [String(cmd.text ?? ""), !!cmd.replace]);
       if (!typed) return { ok: false, error: "no editable element has focus (or no option of a select matches) — give --at X,Y" };
       await settle(tab.id);
       break;
@@ -474,9 +474,24 @@ function pageClick(x, y) {
   return true;
 }
 
-function pageType(text) {
+function pageType(text, replace) {
   const el = document.activeElement;
   if (!el) return false;
+  // --replace: select what the field holds so the insertion below replaces
+  // it through the same editing pipeline. Synthetic keys cannot select all
+  // (no default action), and a Backspace per character from wherever the
+  // click left the caret cannot empty a filled field reliably.
+  if (replace && el.tagName !== "SELECT") {
+    if (el.isContentEditable) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else if (typeof el.select === "function") {
+      el.select();
+    }
+  }
   // A native <select> takes no text: synthetic key events never reach its
   // type-ahead and its popup is a window of the OS, not of the page. So text
   // typed at a select picks the option it names — by label first, then by
@@ -504,7 +519,7 @@ function pageType(text) {
   if (!document.execCommand("insertText", false, text)) {
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const set = Object.getOwnPropertyDescriptor(proto, "value").set;
-    set.call(el, (el.value || "") + text);
+    set.call(el, replace ? text : (el.value || "") + text);
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }
   // A keystroke's commit is more than `input`: forms that validate what they
