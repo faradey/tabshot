@@ -139,6 +139,10 @@ tabshot status  [--domain D]
   filled and rates loaded — Chrome handed back the last frame it had
   painted. If a picture contradicts the `ok` of the actions before it, make
   the window visible and shoot again before acting on the picture.
+- **A tab mid-redirect is on neither host.** A navigation that hops through
+  another subdomain (a sign-in bounce) leaves no tab on the domain asked for
+  for a second or two. While any tab is still loading, a command waits up to
+  3 s for one to appear before answering `no open tab`; `status` never waits.
 - Synthetic events: file pickers, drag and drop, and `alert()` dialogs cannot
   be driven. A native `<select>` is the exception — `type` picks its option
   by name, see above.

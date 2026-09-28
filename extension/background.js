@@ -173,9 +173,23 @@ async function handle(cmd, c) {
   if (!allowed(domain, c.domains)) {
     return { ok: false, error: `domain ${domain} is not on the allow list` };
   }
-  const tabs = await chrome.tabs.query({ url: [`*://${domain}/*`, `*://*.${domain}/*`] });
+  const find = () => chrome.tabs.query({ url: [`*://${domain}/*`, `*://*.${domain}/*`] });
+  let tabs = await find();
   if (cmd.action === "status") {
     return { ok: true, open: tabs.length > 0, tabs: tabs.length };
+  }
+  // A navigation can pass through another host on its way (a sign-in hop
+  // between two subdomains of one site), and for that second or two no tab is
+  // on the domain asked for. Seen 2026-09-28: right after a back arrow, two
+  // commands in a row answered "no open tab" for both the host the page left
+  // and the one it was going to, and the parent domain found the tab a moment
+  // later; the intermediate host was never seen, since URLs never leave the
+  // extension. So while any tab is loading, wait a little before saying none
+  // is open.
+  for (let i = 0; !tabs.length && i < 12; i++) {
+    if (!(await chrome.tabs.query({ status: "loading" })).length) break;
+    await sleep(250);
+    tabs = await find();
   }
   if (!tabs.length) return { ok: false, error: `no open tab for ${domain}` };
 
