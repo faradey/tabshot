@@ -375,6 +375,7 @@ async function open(cmd, domain, tabs, allowList) {
     await chrome.tabs.update(tab.id, { url: target.href });
     await sleep(300);
     await waitComplete(tab.id, 30000);
+    await quiet(tab.id);
     tab = await chrome.tabs.get(tab.id);
     if (!onAllowList(tab, allowList)) return { ok: true, note: LEFT_ALLOW_LIST };
   } else {
@@ -424,6 +425,7 @@ async function openWindow(url, allowList) {
   await trackWindow(win.id);
   await sleep(300);
   await waitComplete(tab.id, 30000);
+  await quiet(tab.id);
   tab = await chrome.tabs.get(tab.id);
   // A redirect can end on a host off the allow list (a sign-in page on
   // another domain): the command says so rather than act there, and does not
@@ -622,6 +624,21 @@ async function settle(tabId) {
   await sleep(200);
 }
 
+// A freshly loaded app page is "complete" long before it shows anything: the
+// first shot of a Partners listing opened in tabshot's window was the empty
+// frame with only the header (2026-10-09). So after a load, wait for the page
+// to go quiet: no DOM mutation and no finished request for 1.5 s, 8 s at most.
+// 500 ms was measured too short on the same page: it sat as a skeleton,
+// unchanged, while its API call ran, and drew the form 0.4–1.1 s after a
+// 500 ms quiet had already been called.
+async function quiet(tabId) {
+  try {
+    await exec(tabId, 0, pageQuiet, [1500, 8000]);
+  } catch {
+    // a page that cannot be scripted is photographed as it is
+  }
+}
+
 async function waitComplete(tabId, ms) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
@@ -649,6 +666,31 @@ async function resize(tab, w, h) {
 // ---------------------------------------------------------------- in-page code
 // Each of these is serialised into the tab. They return numbers, booleans and
 // the host of an iframe's src — never text from the page.
+
+function pageQuiet(quietMs, maxMs) {
+  return new Promise((resolve) => {
+    let timer;
+    const again = () => { clearTimeout(timer); timer = setTimeout(done, quietMs); };
+    const dom = new MutationObserver(again);
+    let net = null;
+    const done = () => {
+      dom.disconnect();
+      if (net) net.disconnect();
+      clearTimeout(timer);
+      clearTimeout(cap);
+      resolve(true);
+    };
+    dom.observe(document, { childList: true, subtree: true, attributes: true, characterData: true });
+    try {
+      net = new PerformanceObserver(again);
+      net.observe({ type: "resource" });
+    } catch {
+      net = null;
+    }
+    timer = setTimeout(done, quietMs);
+    const cap = setTimeout(done, maxMs);
+  });
+}
 
 function pageMeasure() {
   return {
