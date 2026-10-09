@@ -177,6 +177,14 @@ tabshot status  [--domain D]
   another subdomain (a sign-in bounce) leaves no tab on the domain asked for
   for a second or two. While any tab is still loading, a command waits up to
   3 s for one to appear before answering `no open tab`; `status` never waits.
+- **A click can move the page to another allowed host**, and the next
+  command has to name it. Partners → Manage listing → Edit lands on
+  `apps.shopify.com`; asked for `partners.shopify.com` afterwards, tabshot
+  said only `no open tab`, and the editor was taken for a closed window
+  (2026-10-09). Now an action that carries the page elsewhere says
+  `note: the page moved to <host>`, and `no open tab` names the allowed
+  hosts tabshot's own window is on. A page that leaves the allow list is
+  reported as having left, not where, and is not photographed.
 - Synthetic events: file pickers, drag and drop, and `alert()` dialogs cannot
   be driven. A native `<select>` is the exception — `type` picks its option
   by name, see above.

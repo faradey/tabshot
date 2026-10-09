@@ -268,7 +268,19 @@ async function handle(cmd, c) {
     await sleep(250);
     tabs = await find();
   }
-  if (!tabs.length) return { ok: false, error: `no open tab for ${domain}` };
+  if (!tabs.length) {
+    // A click can carry tabshot's own tab to another allowed host (Partners →
+    // Manage listing → Edit lands on apps.shopify.com). Asked for the old host,
+    // the bare "no open tab" sent a session looking for a closed window for
+    // four rounds (2026-10-09) while the editor sat open one domain over. The
+    // hosts named here are on the allow list, so nothing leaves that the
+    // caller did not already name.
+    const elsewhere = await ownHosts(c.domains);
+    if (elsewhere.length) {
+      return { ok: false, error: `no open tab for ${domain} — tabshot's window is on ${elsewhere.join(", ")}: retry with --domain ${elsewhere[0]}` };
+    }
+    return { ok: false, error: `no open tab for ${domain}` };
+  }
 
   let tab;
   const own = await ownTabs(tabs);
@@ -284,6 +296,7 @@ async function handle(cmd, c) {
     tab = r.tab;
   }
   const out = { ok: true };
+  const before = hostOf(tab);
 
   switch (cmd.action) {
     case "shot":
@@ -336,6 +349,19 @@ async function handle(cmd, c) {
     }
     default:
       return { ok: false, error: `unknown action ${cmd.action}` };
+  }
+
+  // Say when the action carried the page to another host, so the next command
+  // names the right --domain. Off the allow list, say only that, and take no
+  // picture of a page nobody allowed.
+  tab = await chrome.tabs.get(tab.id);
+  const after = hostOf(tab);
+  if (after && after !== before) {
+    if (!allowed(after, c.domains)) {
+      out.note = LEFT_ALLOW_LIST;
+      return out;
+    }
+    out.note = `the page moved to ${after} — use --domain ${after} from here`;
   }
 
   if (cmd.action === "shot" || cmd.shot) {
@@ -435,9 +461,27 @@ async function openWindow(url, allowList) {
 }
 
 function onAllowList(tab, allowList) {
-  let host = "";
-  try { host = new URL(tab.url || tab.pendingUrl || "").hostname.toLowerCase(); } catch {}
+  const host = hostOf(tab);
   return !!host && allowed(host, allowList);
+}
+
+function hostOf(tab) {
+  try {
+    return new URL(tab.url || tab.pendingUrl || "").hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+// The allow-listed hosts tabshot's own tabs are on now, most recent first.
+async function ownHosts(allowList) {
+  const own = await ownTabs(await chrome.tabs.query({}));
+  const hosts = [];
+  for (const t of [...own].sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))) {
+    const h = hostOf(t);
+    if (h && allowed(h, allowList) && !hosts.includes(h)) hosts.push(h);
+  }
+  return hosts;
 }
 
 // captureVisibleTab takes activeTab (a click on the icon in that tab) or
