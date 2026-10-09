@@ -130,22 +130,26 @@ function originOf(url) {
 }
 pollLoop();
 
-// A link with target=_blank in a shared tab opens a tab nobody clicked the
-// icon on, and the grant cannot be copied: activeTab is Chrome's, per tab,
-// per gesture. What can be done is to keep the navigation in the tab that
-// holds the grant — when the new tab is the same origin as its opener, the
-// opener is sent to that URL and the new tab closed, and the grant survives
-// because it lasts while the tab stays on its origin. Across origins (a
-// store's "buy again" opening the storefront from an account page) the new
-// tab is left alone and needs a click like any other.
+// A link with target=_blank in one of tabshot's tabs opens a tab inside
+// tabshot's window. When it is the same origin as its opener, the opener is
+// sent to that URL and the new tab closed: the flow stays in one tab, and a
+// click grant on it survives, because activeTab lasts while the tab stays on
+// its origin and cannot be copied to another tab. Across origins (a store's
+// "buy again" opening the storefront from an account page) the new tab stays,
+// and is counted as tabshot's — it is in tabshot's window, not the owner's.
+// The owner's own tabs are never folded: tabshot does not act on them.
 chrome.tabs.onCreated.addListener((tab) => {
   if (tab.openerTabId == null) return;
   const opener = tab.openerTabId;
+  (async () => {
+    const { opened } = await chrome.storage.session.get({ opened: [] });
+    if ((opened || []).includes(opener)) await rememberOpened(tab.id);
+  })().catch(() => {});
   const foldIn = async (url) => {
     try {
-      const shares = await loadShares();
+      const { opened } = await chrome.storage.session.get({ opened: [] });
+      if (!(opened || []).includes(opener)) return false;
       const openerTab = await chrome.tabs.get(opener);
-      if (shares[opener] === undefined || shares[opener] !== originOf(openerTab.url || "")) return false;
       if (originOf(openerTab.url || "") !== originOf(url)) return false;
       await chrome.tabs.update(opener, { url, active: true });
       await chrome.tabs.remove(tab.id);
@@ -166,18 +170,12 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 // ---------------------------------------------------------------- idle windows
-// tabshot makes windows of its own: `open` opens one on a page, and a shared
-// tab is moved into one for its screenshot (isolate). Left alone they hung
-// around for days. So each is remembered with when it was last used — by a
-// command, or by the owner bringing it to the front — and once it has been
-// idle longer than the options say (an hour by default, 0 for never):
-//
-// - a window `open` made is closed; it held nothing but what was asked for;
-// - a window a shared tab was moved into gives the tab back to the window it
-//   came from (or to another ordinary window if that one is gone), and the
-//   emptied window closes by itself. The tab is the owner's; it is not closed.
-//
-// A window the owner has in front is never touched, idle or not.
+// Every command works in a window of tabshot's own (see ownTab). Left alone
+// they hung around for days, so each is remembered with when it was last used
+// — by a command, or by the owner bringing it to the front — and once it has
+// been idle longer than the options say (an hour by default, 0 for never) it
+// is closed. It holds nothing of the owner's: the owner's tabs are never moved
+// into it. A window the owner has in front is never closed, idle or not.
 
 const IDLE_DEFAULT_MINUTES = 60;
 
@@ -186,9 +184,9 @@ async function trackedWindows() {
   return windows || {};
 }
 
-async function trackWindow(windowId, kind, home) {
+async function trackWindow(windowId) {
   const windows = await trackedWindows();
-  windows[windowId] = { kind, home: home ?? null, used: Date.now() };
+  windows[windowId] = { used: Date.now() };
   await chrome.storage.session.set({ windows });
 }
 
@@ -224,7 +222,7 @@ async function sweep() {
     const windowId = Number(key);
     let win;
     try {
-      win = await chrome.windows.get(windowId, { populate: true });
+      win = await chrome.windows.get(windowId);
     } catch {
       await untrackWindow(windowId);
       continue;
@@ -233,33 +231,9 @@ async function sweep() {
       await touchWindow(windowId);
       continue;
     }
-
-    if (entry.kind === "opened") {
-      await chrome.windows.remove(windowId);
-    } else {
-      const home = await homeWindow(entry.home, windowId);
-      if (home == null) continue; // nowhere to put the owner's tab: leave it
-      await chrome.tabs.move(win.tabs.map((t) => t.id), { windowId: home, index: -1 });
-    }
+    await chrome.windows.remove(windowId);
     await untrackWindow(windowId);
   }
-}
-
-// The window a moved tab came from, if it still exists; else the ordinary
-// window the owner used last that is not one of tabshot's own.
-async function homeWindow(home, except) {
-  const tracked = await trackedWindows();
-  const all = await chrome.windows.getAll({ windowTypes: ["normal"] });
-  if (home != null && all.some((w) => w.id === home)) return home;
-  const candidates = all.filter((w) => w.id !== except && !tracked[w.id]);
-  if (!candidates.length) return null;
-  try {
-    const last = await chrome.windows.getLastFocused({ windowTypes: ["normal"] });
-    if (candidates.some((w) => w.id === last.id)) return last.id;
-  } catch {
-    // no window has had focus yet
-  }
-  return candidates[0].id;
 }
 
 // ---------------------------------------------------------------- commands
@@ -296,12 +270,19 @@ async function handle(cmd, c) {
   }
   if (!tabs.length) return { ok: false, error: `no open tab for ${domain}` };
 
-  const shared = await sharedTabs(tabs);
-  if (!shared.length) {
-    return { ok: false, error: `tab not shared — click the tabshot icon on the ${domain} tab (again if it moved to another site), then retry` };
+  let tab;
+  const own = await ownTabs(tabs);
+  if (own.length) {
+    tab = await retry(async () => front(pickTab(own)));
+  } else {
+    const source = await sourceTab(tabs);
+    if (!source) {
+      return { ok: false, error: `tab not shared — click the tabshot icon on the ${domain} tab (again if it moved to another site), then retry` };
+    }
+    const r = await openWindow(source.url, c.domains);
+    if (r.error) return { ok: false, error: r.error };
+    tab = r.tab;
   }
-
-  let tab = await retry(async () => isolate(pickTab(shared)));
   const out = { ok: true };
 
   switch (cmd.action) {
@@ -359,28 +340,24 @@ async function handle(cmd, c) {
 
   if (cmd.action === "shot" || cmd.shot) {
     tab = await chrome.tabs.get(tab.id);
+    if (!(await canCapture(tab))) {
+      // The action itself has happened; only the picture is missing.
+      if (cmd.action === "shot") return { ok: false, error: NEEDS_CLICK };
+      out.note = NEEDS_CLICK;
+      return out;
+    }
     Object.assign(out, await capture(tab, cmd.zoom, cmd.width != null ? num(cmd.width) : 0));
   }
   return out;
 }
 
+const NEEDS_CLICK = "tabshot opened the page in a window of its own — click the tabshot icon there (or turn on \"Capture without a click\"), then retry";
+
 // `open`: bring an allow-listed page up on request, without the owner opening
 // the tab first. The URL comes in from the command line and is checked here
 // against the allow list by its own host, like a domain is; nothing about the
-// page goes back out.
-//
-// Where it goes, in order: a tab the owner clicked the icon on, on that
-// domain — it keeps its grant, which lasts while the tab stays on its origin;
-// then a tab an earlier `open` made, so repeated calls do not pile up windows;
-// else a new window, unfocused, so the owner's own window keeps its place.
-// Tabs the owner has open on the domain without clicking are not taken over,
-// "Capture without a click" or not: being allowed to photograph a tab is not
-// being asked to send it somewhere else.
-//
-// A page opened this way can be clicked and typed into (host access to the
-// allow list is enough for that), but photographed only with "Capture without
-// a click": captureVisibleTab takes activeTab or <all_urls>, and a tab the
-// extension opened has no click behind it.
+// page goes back out. It goes to tabshot's own tab on that domain if there is
+// one, so repeated calls do not pile up windows; else into a new window.
 async function open(cmd, domain, tabs, allowList) {
   let target;
   try {
@@ -391,44 +368,83 @@ async function open(cmd, domain, tabs, allowList) {
   if (!/^https?:$/.test(target.protocol)) return { ok: false, error: "open needs an http(s) URL" };
   if (target.hostname.toLowerCase() !== domain) return { ok: false, error: "the URL's host is not the domain given" };
 
-  const clicked = await clickedTabs(tabs);
-  const ours = await openedTabs(tabs);
   let tab;
-  if (clicked.length) {
-    tab = await retry(async () => isolate(pickTab(clicked)));
+  const own = await ownTabs(tabs);
+  if (own.length) {
+    tab = await retry(async () => front(pickTab(own)));
     await chrome.tabs.update(tab.id, { url: target.href });
-  } else if (ours.length) {
-    tab = await retry(async () => isolate(pickTab(ours)));
-    await chrome.tabs.update(tab.id, { url: target.href });
+    await sleep(300);
+    await waitComplete(tab.id, 30000);
+    tab = await chrome.tabs.get(tab.id);
+    if (!onAllowList(tab, allowList)) return { ok: true, note: LEFT_ALLOW_LIST };
   } else {
-    const win = await chrome.windows.create({ url: target.href, focused: false, state: "normal" });
-    tab = win.tabs[0];
-    await rememberOpened(tab.id);
-    await trackWindow(win.id, "opened", null);
-  }
-  await sleep(300);
-  await waitComplete(tab.id, 30000);
-  tab = await chrome.tabs.get(tab.id);
-
-  // A redirect can end on a host off the allow list (a sign-in page on
-  // another domain): the command says so rather than act there, and does not
-  // say where — URLs never leave.
-  let host = "";
-  try { host = new URL(tab.url || tab.pendingUrl || "").hostname.toLowerCase(); } catch {}
-  if (!host || !allowed(host, allowList)) {
-    return { ok: true, note: "the page left the allow list (a sign-in redirect?) — log in there in the browser, then open again" };
+    const r = await openWindow(target.href, allowList);
+    if (r.error) return { ok: true, note: r.error };
+    tab = r.tab;
   }
 
   const out = { ok: true };
   if (cmd.shot) {
-    const canShoot = clicked.some((t) => t.id === tab.id) || (await chrome.permissions.contains({ origins: ["<all_urls>"] }));
-    if (!canShoot) {
-      out.note = "opened; a screenshot of it needs a click on the tabshot icon there, or \"Capture without a click\" in the options";
+    if (!(await canCapture(tab))) {
+      out.note = NEEDS_CLICK;
       return out;
     }
     Object.assign(out, await capture(tab, null, cmd.width != null ? num(cmd.width) : 0));
   }
   return out;
+}
+
+const LEFT_ALLOW_LIST = "the page left the allow list (a sign-in redirect?) — log in there in the browser, then retry";
+
+// Every command works in a window of tabshot's own, never in the owner's. It
+// used to move the owner's tab out into a window for its screenshot, which
+// tore it out of the owner's tab strip and left their window rearranged; now
+// the owner's tab is read for its URL and nothing else, and the page is loaded
+// again in tabshot's window. The cost is the page's in-memory state — a form
+// half filled in the owner's tab is not in tabshot's copy; the sign-in is,
+// since cookies are the browser's, not the tab's.
+//
+// Which of the owner's tabs may lend its URL: one whose icon was clicked and
+// which is still on the origin it was clicked on; with "Capture without a
+// click" on (<all_urls>) any tab on the domain, clicked ones first. With none
+// the command stops before opening anything.
+async function sourceTab(tabs) {
+  const clicked = await clickedTabs(tabs);
+  if (clicked.length) return pickTab(clicked);
+  if (tabs.length && (await chrome.permissions.contains({ origins: ["<all_urls>"] }))) return pickTab(tabs);
+  return null;
+}
+
+// A new window on the URL, unfocused, so the owner's own window keeps its
+// place; remembered as tabshot's, and closed by sweep() once idle.
+async function openWindow(url, allowList) {
+  const win = await chrome.windows.create({ url, focused: false, state: "normal" });
+  let tab = win.tabs[0];
+  await rememberOpened(tab.id);
+  await trackWindow(win.id);
+  await sleep(300);
+  await waitComplete(tab.id, 30000);
+  tab = await chrome.tabs.get(tab.id);
+  // A redirect can end on a host off the allow list (a sign-in page on
+  // another domain): the command says so rather than act there, and does not
+  // say where — URLs never leave.
+  if (!onAllowList(tab, allowList)) return { error: LEFT_ALLOW_LIST };
+  return { tab };
+}
+
+function onAllowList(tab, allowList) {
+  let host = "";
+  try { host = new URL(tab.url || tab.pendingUrl || "").hostname.toLowerCase(); } catch {}
+  return !!host && allowed(host, allowList);
+}
+
+// captureVisibleTab takes activeTab (a click on the icon in that tab) or
+// <all_urls>. A tab tabshot opened has no click behind it until the owner
+// gives one there.
+async function canCapture(tab) {
+  const shares = await loadShares();
+  if (shares[tab.id] !== undefined && shares[tab.id] === originOf(tab.url || "")) return true;
+  return await chrome.permissions.contains({ origins: ["<all_urls>"] });
 }
 
 // Tabs whose icon was clicked and which are still on that origin.
@@ -437,12 +453,14 @@ async function clickedTabs(tabs) {
   return tabs.filter((t) => shares[t.id] !== undefined && shares[t.id] === originOf(t.url || ""));
 }
 
-// Tabs an earlier `open` created, kept in session storage like the shares
-// (an extension reload or a browser restart forgets them; the tabs stay
-// with the owner).
-async function openedTabs(tabs) {
+// tabshot's own tabs: made by it, and still in a window it made. One the owner
+// dragged into a window of theirs has become theirs. Kept in session storage
+// (an extension reload or a browser restart forgets them; the windows then
+// stay with the owner).
+async function ownTabs(tabs) {
   const { opened } = await chrome.storage.session.get({ opened: [] });
-  return tabs.filter((t) => (opened || []).includes(t.id));
+  const windows = await trackedWindows();
+  return tabs.filter((t) => (opened || []).includes(t.id) && windows[t.windowId]);
 }
 
 async function rememberOpened(tabId) {
@@ -473,49 +491,21 @@ function allowed(domain, list) {
   return list.some((d) => domain === d || domain.endsWith("." + d));
 }
 
-// Only a tab whose icon was clicked, and which is still on the origin it was
-// clicked on, can be photographed. Those are the only candidates, and with none
-// the command stops before touching any window: falling back to the other tabs
-// used to send a tab nobody shared through isolate(), which moved it into a
-// window of its own and then failed the capture anyway — the owner's Partners
-// dashboard ended up in a separate window for nothing.
-//
-// With "capture without a click" on (the <all_urls> permission, granted from
-// the options page), no click is needed: every tab on an allowed domain is a
-// candidate, clicked ones first, so a tab the owner pointed at still wins.
-//
-// A tab `open` made is a candidate too: the command line asked for it, so it
-// is not a tab of the owner's being taken over. Clicks and typing work there
-// with host access alone; a screenshot still needs a click or <all_urls>.
-async function sharedTabs(tabs) {
-  const shares = await loadShares();
-  const clicked = tabs.filter((t) => shares[t.id] !== undefined && shares[t.id] === originOf(t.url || ""));
-  if (clicked.length) return clicked;
-  if (await chrome.permissions.contains({ origins: ["<all_urls>"] })) return tabs;
-  return await openedTabs(tabs);
-}
-
 // The most recently used matching tab; the active one wins a tie.
 function pickTab(tabs) {
   return [...tabs].sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0) || (b.active ? 1 : 0) - (a.active ? 1 : 0))[0];
 }
 
 // captureVisibleTab photographs whatever tab is showing in a window, so the
-// shared tab gets a window of its own: the owner keeps browsing elsewhere and
-// nothing else can appear in the frame.
-async function isolate(tab) {
-  const win = await chrome.windows.get(tab.windowId, { populate: true });
-  if (win.tabs.length > 1) {
-    const own = await chrome.windows.create({ tabId: tab.id, focused: false, state: "normal" });
-    await trackWindow(own.id, "isolated", win.id);
-    tab = await chrome.tabs.get(tab.id);
-  } else {
-    if (win.state === "minimized") await chrome.windows.update(win.id, { state: "normal", focused: false });
-    if (!tab.active) await chrome.tabs.update(tab.id, { active: true });
-  }
+// tab is made the showing one in its window — tabshot's window, where a
+// target=_blank may have added a second tab.
+async function front(tab) {
+  const win = await chrome.windows.get(tab.windowId);
+  if (win.state === "minimized") await chrome.windows.update(win.id, { state: "normal", focused: false });
+  if (!tab.active) await chrome.tabs.update(tab.id, { active: true });
   await touchWindow(tab.windowId);
   await sleep(150);
-  return tab;
+  return await chrome.tabs.get(tab.id);
 }
 
 // ---------------------------------------------------------------- screenshot

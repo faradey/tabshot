@@ -36,9 +36,11 @@ tabshot serve  ──── long-poll ────►  extension (service worker
 - **`tabshot serve`** listens on `127.0.0.1:47831`, creates a token on first
   run (`~/.config/tabshot/token`, mode 0600) and queues commands.
 - **The extension** polls the daemon, refuses any domain not in its allow
-  list, finds the most recently used tab on that domain, moves it into a
-  window of its own (so your browsing in other windows never appears in a
-  frame), and answers.
+  list, and works in a window of its own: the first command for a domain
+  opens one, unfocused, on the URL of your tab there, and later commands
+  reuse it. Your tab is read for its URL and nothing else — it is never
+  moved, so your tab strip stays as you left it and your browsing never
+  appears in a frame.
 - **Every other subcommand** posts one command and prints the answer.
 
 The allow list lives in the extension's options and is also exactly the set
@@ -67,16 +69,23 @@ click again. Reloading the extension ends every grant too.
 The extension records which origin each click was on. When the tab moves to
 another site (a back arrow that leaves the page, a login redirect) Chrome ends
 the grant, and the badge goes off with it instead of promising a capture that
-would fail. Commands act **only** on shared tabs: with none, they answer "tab
-not shared" and touch nothing — no tab is moved into its own window unless it
-is the one being photographed.
+would fail. With no shared tab, commands answer "tab not shared" and open
+nothing.
 
-A link that opens a new tab (`target=_blank`) opens one nobody clicked on, and
-the grant cannot be copied to it. When that new tab is the **same origin** as
-the shared tab that opened it, the extension sends the shared tab there
-instead and closes the new one — the grant survives, the flow continues. Across
-origins (an account page opening the storefront) the new tab is left as it is
-and needs its own click, like any other.
+**The click lends the URL, not the tab.** Commands run in tabshot's own
+window, opened on the URL of the tab you clicked; your tab stays where it is.
+The sign-in comes along (cookies are the browser's), the page's in-memory
+state does not — a form half filled in your tab is empty in tabshot's copy.
+Chrome's click grant belongs to the tab it was given in, so a screenshot in
+tabshot's window needs either one more click on the icon **there**, or
+**"Capture without a click"** (below), which needs none at all. Clicks and
+typing work without either.
+
+A link that opens a new tab (`target=_blank`) in tabshot's window: when the
+new tab is the **same origin** as the one that opened it, the extension sends
+the opener there instead and closes the new one, so the flow stays in one tab
+and a click grant on it survives. Across origins (an account page opening the
+storefront) the new tab stays in tabshot's window and counts as tabshot's.
 
 ```sh
 tabshot status                          # extension: connected; allowed: ...
@@ -103,24 +112,22 @@ tabshot status  [--domain D]
 
 - `open` brings a page up on request, so nobody has to open the tab first.
   The URL's host is the domain, checked against the allow list like any
-  other. It goes to a tab you clicked the icon on, on that domain; else to
-  the tab an earlier `open` made, so repeated calls do not pile up windows;
-  else into a new window that opens without focus. Tabs you have open on the
-  domain without clicking are left where they are. A page opened this way
-  takes clicks and typing (host access is enough for those); a screenshot of
-  it needs **"Capture without a click"**, because a tab the extension opened
-  has no click behind it — without the option `open` says so instead of
-  failing. A redirect off the allow list (a sign-in page elsewhere) is
-  reported without saying where it went. The URL goes into the browser;
-  nothing about the page comes back but pixels, as everywhere else.
-- **tabshot tidies up its own windows.** A window `open` made, and a window a
-  shared tab was moved into for its screenshot, are remembered with when
-  they were last used — by a command, or by you bringing one to the front.
-  After an hour idle (the options page sets the minutes; 0 keeps them for
-  ever) the first kind is closed, and the second gives its tab back to the
-  window it came from, so the emptied window goes and your tab stays. A
-  window you have in front is never touched. Windows made before this
-  existed are not known to it and are yours to close.
+  other. It goes to tabshot's own tab on that domain, so repeated calls do
+  not pile up windows; else into a new window that opens without focus. No
+  tab of yours is needed or touched. A page opened this way takes clicks and
+  typing (host access is enough for those); a screenshot of it needs a click
+  on the icon in that window or **"Capture without a click"** — without
+  either, `open` says so instead of failing. A redirect off the allow list (a
+  sign-in page elsewhere) is reported without saying where it went. The URL
+  goes into the browser; nothing about the page comes back but pixels, as
+  everywhere else.
+- **tabshot tidies up its own windows.** Each is remembered with when it was
+  last used — by a command, or by you bringing it to the front — and closed
+  after an hour idle (the options page sets the minutes; 0 keeps them for
+  ever). A window you have in front is never closed. A tab of tabshot's that
+  you drag into a window of yours becomes yours: commands stop using it, and
+  it is not closed. Windows made before an extension reload are forgotten
+  with it and are yours to close.
 
 - Coordinates are CSS pixels of the viewport. A screenshot is **downscaled
   to 800 px wide by default** — for a reader that pays per pixel (a model
