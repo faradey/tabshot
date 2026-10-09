@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -22,6 +23,7 @@ import (
 type result struct {
 	OK       bool     `json:"ok"`
 	Error    string   `json:"error"`
+	Note     string   `json:"note"`
 	PNG      string   `json:"png"`
 	Open     *bool    `json:"open"`
 	Tabs     *int     `json:"tabs"`
@@ -85,12 +87,29 @@ func Run(cmd string, args []string) int {
 	full := fs.Bool("full", false, "screenshot at viewport size (for pictures that will be published)")
 	at := fs.String("at", "", "type/scroll: X,Y point to act at")
 	replace := fs.Bool("replace", false, "type: replace the field's whole content instead of inserting at the caret")
+	pageURL := fs.String("url", "", "open: the page to bring up, on an allow-listed domain")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	pos := fs.Args()
 
 	body := map[string]any{"action": cmd, "timeout": *timeout}
+	if cmd == "open" {
+		// The domain is the URL's own host: the extension checks that one
+		// against its allow list, so a --domain that disagreed with the URL
+		// could only be a way to confuse that check.
+		u, err := url.Parse(*pageURL)
+		if *pageURL == "" || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+			fmt.Fprintln(os.Stderr, "open needs --url with an http(s) address")
+			return 2
+		}
+		if *domain != "" && !strings.EqualFold(*domain, u.Hostname()) && !strings.HasSuffix(strings.ToLower(u.Hostname()), "."+strings.ToLower(*domain)) {
+			fmt.Fprintf(os.Stderr, "--domain %s does not match the URL's host %s\n", *domain, u.Hostname())
+			return 2
+		}
+		body["url"] = u.String()
+		*domain = u.Hostname()
+	}
 	if *domain != "" {
 		body["domain"] = *domain
 	} else if cmd != "status" {
@@ -133,7 +152,7 @@ func Run(cmd string, args []string) int {
 	}
 
 	switch cmd {
-	case "status", "refresh":
+	case "status", "refresh", "open":
 		if !need(0) {
 			return 2
 		}
@@ -243,6 +262,9 @@ func Run(cmd string, args []string) int {
 		}
 	default:
 		fmt.Println("ok")
+	}
+	if res.Note != "" {
+		fmt.Println("note:", res.Note)
 	}
 
 	if res.PNG != "" {

@@ -33,6 +33,10 @@ refuses a domain that is not on its allow list.
   tabshot scroll  --domain D DX DY [--at X,Y]    scroll the scrollable under the point (default: centre)
   tabshot refresh --domain D
   tabshot resize  --domain D W H                 make the viewport exactly W×H CSS pixels
+  tabshot open    --url URL [--shot F]           bring an allow-listed page up on request: the
+                                                 shared tab on that domain goes there, or a new
+                                                 window opens on it. A screenshot of a page opened
+                                                 this way needs "Capture without a click"
 
 Common flags: --shot F (take a screenshot after the action), --timeout SEC.
 Flags go before positional arguments. Coordinates are CSS pixels of the
@@ -52,7 +56,7 @@ func main() {
 		code = daemon.Run(args)
 	case "token":
 		code = client.Token(args)
-	case "status", "shot", "click", "type", "key", "scroll", "refresh", "resize":
+	case "status", "shot", "click", "type", "key", "scroll", "refresh", "resize", "open":
 		code = client.Run(cmd, args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)

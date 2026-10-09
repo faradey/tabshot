@@ -97,8 +97,30 @@ tabshot key     --domain D Enter|Tab|Escape|Backspace|ArrowDown|...
 tabshot scroll  --domain D DX DY [--at X,Y]
 tabshot refresh --domain D
 tabshot resize  --domain D W H
+tabshot open    --url URL [--shot F]
 tabshot status  [--domain D]
 ```
+
+- `open` brings a page up on request, so nobody has to open the tab first.
+  The URL's host is the domain, checked against the allow list like any
+  other. It goes to a tab you clicked the icon on, on that domain; else to
+  the tab an earlier `open` made, so repeated calls do not pile up windows;
+  else into a new window that opens without focus. Tabs you have open on the
+  domain without clicking are left where they are. A page opened this way
+  takes clicks and typing (host access is enough for those); a screenshot of
+  it needs **"Capture without a click"**, because a tab the extension opened
+  has no click behind it — without the option `open` says so instead of
+  failing. A redirect off the allow list (a sign-in page elsewhere) is
+  reported without saying where it went. The URL goes into the browser;
+  nothing about the page comes back but pixels, as everywhere else.
+- **tabshot tidies up its own windows.** A window `open` made, and a window a
+  shared tab was moved into for its screenshot, are remembered with when
+  they were last used — by a command, or by you bringing one to the front.
+  After an hour idle (the options page sets the minutes; 0 keeps them for
+  ever) the first kind is closed, and the second gives its tab back to the
+  window it came from, so the emptied window goes and your tab stays. A
+  window you have in front is never touched. Windows made before this
+  existed are not known to it and are yours to close.
 
 - Coordinates are CSS pixels of the viewport. A screenshot is **downscaled
   to 800 px wide by default** — for a reader that pays per pixel (a model
@@ -134,6 +156,11 @@ tabshot status  [--domain D]
   window, and `shot` then answers `Failed to capture tab: image readback
   failed` while clicks and typing still land. Another desktop is fine;
   partly visible is fine. Measured 2026-09-19 on macOS through a checkout.
+  Not every covered window stops, though: on 2026-10-09 a window `open`
+  had just made, at the bottom of the window stack and exactly under
+  another Chrome window of the same size, gave three current frames in a
+  row (a navigation and a scroll both visible). Treat that as luck, not a
+  property.
 - **A shot can be a stale frame.** Same cause, other symptom: three shots
   in a row showed a form with two fields empty while the page had them
   filled and rates loaded — Chrome handed back the last frame it had

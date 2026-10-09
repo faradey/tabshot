@@ -16,8 +16,9 @@ function origins(domains) {
 }
 
 async function load() {
-  const c = await chrome.storage.local.get({ domains: [], port: 47831, token: "", lastPoll: 0, lastError: "" });
+  const c = await chrome.storage.local.get({ domains: [], port: 47831, token: "", lastPoll: 0, lastError: "", idleMinutes: 60 });
   $("domains").value = c.domains.join("\n");
+  $("idle").value = c.idleMinutes;
   $("port").value = c.port;
   $("token").value = c.token;
   $("noclick").checked = await chrome.permissions.contains({ origins: ["<all_urls>"] });
@@ -33,6 +34,8 @@ $("save").addEventListener("click", async () => {
   const domains = normalise($("domains").value);
   const port = parseInt($("port").value, 10) || 47831;
   const token = $("token").value.trim();
+  const idle = parseInt($("idle").value, 10);
+  const idleMinutes = Number.isFinite(idle) && idle >= 0 ? idle : 60;
   const before = (await chrome.storage.local.get({ domains: [] })).domains;
 
   // Host access is exactly the allow list: ask for the new domains, drop the
@@ -49,7 +52,7 @@ $("save").addEventListener("click", async () => {
   const gone = before.filter((d) => !domains.includes(d));
   if (gone.length) await chrome.permissions.remove({ origins: origins(gone) }).catch(() => {});
 
-  await chrome.storage.local.set({ domains, port, token, lastError: "" });
+  await chrome.storage.local.set({ domains, port, token, idleMinutes, lastError: "" });
   $("domains").value = domains.join("\n");
   chrome.runtime.sendMessage({ type: "config-changed" }).catch(() => {});
   await load();

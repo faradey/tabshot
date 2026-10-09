@@ -39,6 +39,13 @@ change data on all websites; what it acts on is still only the allow list
 above, checked by this extension's own code. Turn it off to give the access
 back.</p>
 
+<label>Close tabshot's own windows after <span class="hint">(minutes idle; 0 = never)</span></label>
+<input id="idle" type="number" min="0" step="1">
+<p class="hint">A window <code>open</code> made is closed once nothing has used it
+for this long — no command, and you have not brought it to the front. A window
+a shared tab was moved into for a screenshot gives the tab back to the window
+it came from instead; your tab is never closed.</p>
+
 <button id="save">Save</button>
 <div id="state"></div>
 <script src="options.js"></script>
