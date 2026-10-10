@@ -342,6 +342,10 @@ async function handle(cmd, c) {
       await chrome.tabs.reload(tab.id);
       await sleep(300);
       await waitComplete(tab.id, 30000);
+      // "complete" comes before an app page draws anything: `refresh --shot`
+      // on a Partners listing gave the bare header (2026-10-10), the same
+      // empty frame `open` gave before it learned to wait. Same wait here.
+      await quiet(tab.id);
       break;
     case "resize": {
       out.viewport = await resize(tab, num(cmd.w), num(cmd.h));
