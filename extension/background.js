@@ -302,17 +302,23 @@ async function handle(cmd, c) {
     case "shot":
       break;
     case "click": {
-      const urlBefore = tab.url;
       const p = await resolvePoint(tab.id, num(cmd.x), num(cmd.y));
-      const hit = await exec(tab.id, p.frameId, pageClick, [p.x, p.y]);
-      if (!hit) return { ok: false, error: "nothing at that point" };
-      await settle(tab.id);
       // A click that navigates lands on a page that is "complete" before it
       // draws: `click --shot` on a back arrow to the Partners listing overview
-      // gave the bare header (2026-10-10). When the URL moved, wait for the
-      // page to go quiet, as open and refresh do. A click that stays on the
-      // page skips it, so a checkbox does not cost 1.5 s.
-      if ((await chrome.tabs.get(tab.id)).url !== urlBefore) await quiet(tab.id);
+      // gave the bare header (2026-10-10). Comparing tab.url after the click
+      // did not catch it: the URL changes only when the navigation commits,
+      // and settle() returns at once if loading has not started yet, so the
+      // check still saw the old URL. So the navigation itself is watched —
+      // a top-frame load or a history push — from just before the click.
+      const nav = watchNavigation(tab.id);
+      const hit = await exec(tab.id, p.frameId, pageClick, [p.x, p.y]);
+      if (!hit) { nav.stop(); return { ok: false, error: "nothing at that point" }; }
+      await settle(tab.id);
+      if (nav.stop()) {
+        await sleep(200);
+        await waitComplete(tab.id, 30000);
+        await quiet(tab.id);
+      }
       break;
     }
     case "type": {
@@ -682,6 +688,22 @@ async function childFrame(tabId, parentId, want) {
   }
   if (match.length !== 1) throw new Error("the point is inside an iframe this extension cannot tell apart from its siblings");
   return match[0].frameId;
+}
+
+// Notes whether the tab's top frame starts a navigation or pushes history
+// state; stop() removes the listeners and says whether either happened.
+function watchNavigation(tabId) {
+  let moved = false;
+  const onNav = (d) => { if (d.tabId === tabId && d.frameId === 0) moved = true; };
+  chrome.webNavigation.onBeforeNavigate.addListener(onNav);
+  chrome.webNavigation.onHistoryStateUpdated.addListener(onNav);
+  return {
+    stop() {
+      chrome.webNavigation.onBeforeNavigate.removeListener(onNav);
+      chrome.webNavigation.onHistoryStateUpdated.removeListener(onNav);
+      return moved;
+    },
+  };
 }
 
 async function settle(tabId) {
