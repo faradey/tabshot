@@ -175,7 +175,8 @@ func (d *Daemon) result(w http.ResponseWriter, r *http.Request) {
 // answers with the extension's result verbatim, or {"ok": false, "error": ...}.
 func (d *Daemon) cmd(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+	// 64 MB, as for results: an upload carries its files in the command.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20)).Decode(&body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

@@ -347,6 +347,17 @@ async function handle(cmd, c) {
       out.viewport = await resize(tab, num(cmd.w), num(cmd.h));
       break;
     }
+    case "upload": {
+      const files = Array.isArray(cmd.files) ? cmd.files : [];
+      if (!files.length) return { ok: false, error: "no files given" };
+      const p = await resolvePoint(tab.id, num(cmd.x), num(cmd.y));
+      const r = await exec(tab.id, p.frameId, pageUpload, [p.x, p.y, files]);
+      if (!r || r.error) return { ok: false, error: (r && r.error) || "the page did not take the files" };
+      out.files = r.files;
+      out.via = r.via;
+      await settle(tab.id);
+      break;
+    }
     default:
       return { ok: false, error: `unknown action ${cmd.action}` };
   }
@@ -894,6 +905,89 @@ function pageKey(key) {
   }
   el.dispatchEvent(new KeyboardEvent("keyup", init));
   return true;
+}
+
+// Files go into the page the way the file dialog would put them there: a
+// DataTransfer's FileList assigned to the <input type=file> and announced with
+// `input` and `change`, which is what React and plain listeners both read. The
+// input is found from the point — the element there, the input its <label>
+// controls, or the one file input inside the nearest ancestor that has any
+// (the hidden input behind a drop zone). Open shadow roots are walked both
+// ways, since web-component drop zones keep their input inside one. With no
+// input around the point the files are dropped on it instead, as a drag from
+// the desktop would. Nothing about the page comes back: a count and which of
+// the two ways was used.
+function pageUpload(x, y, files) {
+  const isFile = (n) => !!n && n.tagName === "INPUT" && String(n.type).toLowerCase() === "file";
+  const inputsIn = (root) => {
+    const found = [];
+    const walk = (node) => {
+      for (const el of node.querySelectorAll("*")) {
+        if (isFile(el)) found.push(el);
+        if (el.shadowRoot) walk(el.shadowRoot);
+      }
+    };
+    if (isFile(root)) found.push(root);
+    if (root.shadowRoot) walk(root.shadowRoot);
+    walk(root);
+    return found;
+  };
+  const up = (n) => {
+    if (n.parentElement) return n.parentElement;
+    const r = n.getRootNode();
+    return r instanceof ShadowRoot ? r.host : null;
+  };
+
+  let el = document.elementFromPoint(x, y);
+  while (el && el.shadowRoot) {
+    const inner = el.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === el) break;
+    el = inner;
+  }
+  if (!el) return { error: "nothing at that point" };
+
+  let list;
+  try {
+    list = files.map((f) => {
+      const bin = atob(String(f.data || ""));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new File([bytes], String(f.name || "file"), { type: String(f.type || ""), lastModified: Date.now() });
+    });
+  } catch {
+    return { error: "the files arrived unreadable" };
+  }
+  const dt = new DataTransfer();
+  for (const f of list) dt.items.add(f);
+
+  let input = isFile(el) ? el : null;
+  if (!input) {
+    const label = el.closest && el.closest("label");
+    if (label && isFile(label.control)) input = label.control;
+  }
+  // Climb a few levels only: far enough to reach the hidden input of the drop
+  // zone under the point, not so far that the page's one unrelated file field
+  // is taken for it.
+  for (let n = el, depth = 0; !input && n && n !== document.body && n !== document.documentElement && depth < 8; n = up(n), depth++) {
+    const found = inputsIn(n);
+    if (found.length === 1) input = found[0];
+    else if (found.length > 1) return { error: `${found.length} file fields around that point — aim closer to the one you mean` };
+  }
+
+  if (input) {
+    if (input.disabled) return { error: "the file field there is disabled" };
+    if (list.length > 1 && !input.multiple) return { error: "that file field takes one file — upload them one at a time" };
+    input.files = dt.files;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    return { via: "input", files: list.length };
+  }
+
+  const drag = (type) => new DragEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, dataTransfer: dt });
+  el.dispatchEvent(drag("dragenter"));
+  el.dispatchEvent(drag("dragover"));
+  el.dispatchEvent(drag("drop"));
+  return { via: "drop", files: list.length };
 }
 
 function pageScroll(x, y, dx, dy) {

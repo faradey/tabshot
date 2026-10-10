@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -28,6 +30,8 @@ type result struct {
 	Open     *bool    `json:"open"`
 	Tabs     *int     `json:"tabs"`
 	Allowed  []string `json:"allowed"`
+	Files    int      `json:"files"`
+	Via      string   `json:"via"`
 	Viewport *struct {
 		W   int     `json:"w"`
 		H   int     `json:"h"`
@@ -85,7 +89,7 @@ func Run(cmd string, args []string) int {
 	zoom := fs.String("zoom", "", "shot: X,Y,W,H region of the viewport, saved at device resolution")
 	width := fs.Int("width", 800, "downscale the screenshot to this width; 0 or --full keeps the viewport size")
 	full := fs.Bool("full", false, "screenshot at viewport size (for pictures that will be published)")
-	at := fs.String("at", "", "type/scroll: X,Y point to act at")
+	at := fs.String("at", "", "type/scroll/upload: X,Y point to act at")
 	replace := fs.Bool("replace", false, "type: replace the field's whole content instead of inserting at the caret")
 	pageURL := fs.String("url", "", "open: the page to bring up, on an allow-listed domain")
 	if err := fs.Parse(args); err != nil {
@@ -212,6 +216,21 @@ func Run(cmd string, args []string) int {
 			return 2
 		}
 		body["w"], body["h"] = v[0], v[1]
+	case "upload":
+		if len(pos) == 0 {
+			fmt.Fprintln(os.Stderr, "upload takes one or more files")
+			return 2
+		}
+		if *at == "" {
+			fmt.Fprintln(os.Stderr, "upload needs --at X,Y: the file field or drop zone to hand the files to")
+			return 2
+		}
+		files, err := readUploads(pos)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		body["files"] = files
 	}
 	if *at != "" {
 		x, y, ok := pt(*at)
@@ -260,6 +279,8 @@ func Run(cmd string, args []string) int {
 				fmt.Println("allowed: (none — add domains in the extension's options)")
 			}
 		}
+	case "upload":
+		fmt.Printf("ok — %d file(s) handed over via %s\n", res.Files, res.Via)
 	default:
 		fmt.Println("ok")
 	}
@@ -304,6 +325,49 @@ func Run(cmd string, args []string) int {
 		fmt.Printf("viewport %dx%d dpr %g\n", res.Viewport.W, res.Viewport.H, res.Viewport.DPR)
 	}
 	return 0
+}
+
+// MaxUpload caps the files of one upload together. The daemon takes a command
+// of up to 64 MB and base64 grows the bytes by a third, so this leaves room.
+const MaxUpload = 40 << 20
+
+type upload struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
+
+// readUploads reads the files named on the command line. Only these paths are
+// read: nothing on the page can ask for a file, the caller names every one.
+func readUploads(paths []string) ([]upload, error) {
+	var out []upload
+	total := 0
+	for _, p := range paths {
+		st, err := os.Stat(p)
+		if err != nil {
+			return nil, err
+		}
+		if !st.Mode().IsRegular() {
+			return nil, fmt.Errorf("%s is not a regular file", p)
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		total += len(raw)
+		if total > MaxUpload {
+			return nil, fmt.Errorf("files over %d MB together — upload them in smaller groups", MaxUpload>>20)
+		}
+		typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(p)))
+		if typ == "" {
+			typ = http.DetectContentType(raw)
+		}
+		if i := strings.Index(typ, ";"); i >= 0 {
+			typ = strings.TrimSpace(typ[:i])
+		}
+		out = append(out, upload{Name: filepath.Base(p), Type: typ, Data: base64.StdEncoding.EncodeToString(raw)})
+	}
+	return out, nil
 }
 
 func post(port int, body map[string]any, wait time.Duration) (*result, error) {

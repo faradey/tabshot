@@ -55,6 +55,12 @@ tabshot serve &                                 # keep it running (a launchd/sys
 tabshot token --copy                            # macOS; `tabshot token` prints it elsewhere
 ```
 
+Rebuilding on macOS while the daemon runs from that binary: `rm tabshot`
+first, then `go build -o tabshot .`. Writing over the file in place keeps its
+inode, and macOS then kills the restarted daemon at launch with
+`OS_REASON_CODESIGNING` — launchd shows `spawn failed` and the port stays
+closed (measured 2026-10-10).
+
 Then in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** →
 the `extension/` directory. Open the extension's options, paste the token,
 list the allowed domains, Save (Chrome asks for host access to those domains).
@@ -106,6 +112,7 @@ tabshot key     --domain D Enter|Tab|Escape|Backspace|ArrowDown|...
 tabshot scroll  --domain D DX DY [--at X,Y]
 tabshot refresh --domain D
 tabshot resize  --domain D W H
+tabshot upload  --domain D --at X,Y FILE...
 tabshot open    --url URL [--shot F]
 tabshot status  [--domain D]
 ```
@@ -152,6 +159,18 @@ tabshot status  [--domain D]
   it rather than landing at the caret — synthetic keys cannot select all, and
   emptying a filled field one Backspace at a time from wherever the click left
   the caret is not reliable.
+- `upload` hands local files to the file field or drop zone at `--at`, as
+  if they had been picked in the file dialog. The dialog itself belongs to the
+  OS and cannot be driven, so it is skipped: the files are read by the CLI,
+  carried in the command, and assigned to the `<input type=file>` found from
+  the point — the element there, the input its `<label>` controls, or the
+  single file input inside the nearest of up to eight ancestors (the hidden
+  input behind a drop zone; open shadow roots included). Two or more inputs
+  at that level is a refusal rather than a guess. With no input near the
+  point, the files are dropped on it as a drag from the desktop would be. The
+  answer says which of the two was used — `via input` or `via drop` — and a
+  drop is only as good as the page's drop handler, so check with a shot.
+  Several files need an input with `multiple`; 40 MB per command together.
 - Flags come before positional arguments.
 
 ## Limits
@@ -185,9 +204,10 @@ tabshot status  [--domain D]
   `note: the page moved to <host>`, and `no open tab` names the allowed
   hosts tabshot's own window is on. A page that leaves the allow list is
   reported as having left, not where, and is not photographed.
-- Synthetic events: file pickers, drag and drop, and `alert()` dialogs cannot
-  be driven. A native `<select>` is the exception — `type` picks its option
-  by name, see above.
+- Synthetic events: the file dialog, mouse drags between two points, and
+  `alert()` dialogs cannot be driven. Two exceptions: a native `<select>` —
+  `type` picks its option by name — and file fields, which `upload` fills
+  without the dialog; see above.
 - Sites that require trusted input for a particular control will ignore the
   click. Most web apps do not.
 - **`type` announces a commit, not only an insert.** Measured 2026-09-18 on
@@ -226,6 +246,12 @@ by the extension's code rather than by Chrome. Unticking gives the access back.
 `scripting` means the extension's own code can see the DOM of an allowed tab —
 it is that code, not the manifest, that refuses to pass any of it on, and it
 is short enough to read: `extension/background.js`.
+
+`upload` is the one flow in the other direction: bytes from this machine into
+an allow-listed page, and from there to that site. Only files named on the
+command line are read — the page cannot ask for one — and what comes back is
+a count. It is still a way to send a local file to a website, so whoever holds
+the token can do that too, to the allow list and nowhere else.
 
 ## Licence
 

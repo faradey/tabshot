@@ -33,6 +33,8 @@ refuses a domain that is not on its allow list.
   tabshot scroll  --domain D DX DY [--at X,Y]    scroll the scrollable under the point (default: centre)
   tabshot refresh --domain D
   tabshot resize  --domain D W H                 make the viewport exactly W×H CSS pixels
+  tabshot upload  --domain D --at X,Y FILE...    hand local files to the file field or drop zone
+                                                 at the point, as if picked in the file dialog
   tabshot open    --url URL [--shot F]           bring an allow-listed page up on request: the
                                                  shared tab on that domain goes there, or a new
                                                  window opens on it. A screenshot of a page opened
@@ -56,7 +58,7 @@ func main() {
 		code = daemon.Run(args)
 	case "token":
 		code = client.Token(args)
-	case "status", "shot", "click", "type", "key", "scroll", "refresh", "resize", "open":
+	case "status", "shot", "click", "type", "key", "scroll", "refresh", "resize", "open", "upload":
 		code = client.Run(cmd, args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
