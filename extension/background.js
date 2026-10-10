@@ -302,10 +302,17 @@ async function handle(cmd, c) {
     case "shot":
       break;
     case "click": {
+      const urlBefore = tab.url;
       const p = await resolvePoint(tab.id, num(cmd.x), num(cmd.y));
       const hit = await exec(tab.id, p.frameId, pageClick, [p.x, p.y]);
       if (!hit) return { ok: false, error: "nothing at that point" };
       await settle(tab.id);
+      // A click that navigates lands on a page that is "complete" before it
+      // draws: `click --shot` on a back arrow to the Partners listing overview
+      // gave the bare header (2026-10-10). When the URL moved, wait for the
+      // page to go quiet, as open and refresh do. A click that stays on the
+      // page skips it, so a checkbox does not cost 1.5 s.
+      if ((await chrome.tabs.get(tab.id)).url !== urlBefore) await quiet(tab.id);
       break;
     }
     case "type": {
