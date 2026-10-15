@@ -186,6 +186,29 @@ func (d *Daemon) cmd(w http.ResponseWriter, r *http.Request) {
 	}
 	delete(body, "timeout")
 
+	// The extension's service worker sleeps between polls, and a gap of 4–8 s
+	// is ordinary (seen five times in one session on 2026-10-15). Refusing on
+	// the first look failed commands that had a 30 s timeout to spend, so wait
+	// for the next poll — up to 15 s or the command's own timeout, whichever is
+	// shorter. An extension that has never polled is refused at once: no wait
+	// fixes a missing install or token.
+	if ok, last := d.connected(); !ok && !last.IsZero() {
+		wait := 15 * time.Second
+		if timeout < wait {
+			wait = timeout
+		}
+		deadline := time.Now().Add(wait)
+		for time.Now().Before(deadline) {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
+			if ok, _ := d.connected(); ok {
+				break
+			}
+		}
+	}
 	if ok, last := d.connected(); !ok {
 		msg := "extension is not connected to this daemon"
 		if !last.IsZero() {

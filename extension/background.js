@@ -331,7 +331,7 @@ async function handle(cmd, c) {
       } else {
         frameId = await resolveFocus(tab.id);
       }
-      const typed = await exec(tab.id, frameId, pageType, [String(cmd.text ?? ""), !!cmd.replace]);
+      const typed = await exec(tab.id, frameId, pageType, [String(cmd.text ?? ""), !!cmd.replace, !!cmd.noCommit]);
       if (!typed) return { ok: false, error: "no editable element has focus (or no option of a select matches) — give --at X,Y" };
       await settle(tab.id);
       break;
@@ -833,8 +833,28 @@ function pageFocusedFrame() {
 }
 
 function pageClick(x, y) {
+  // Chrome is usually not the frontmost window while this runs, and a document
+  // without system focus moves `activeElement` on focus() but fires no focus
+  // events. Widgets that open on focus — react-select, Headless UI comboboxes —
+  // then never open: the handler focused its input, `onFocus` never came.
+  // Measured 2026-10-15: mousedown handled (defaultPrevented), active element
+  // the combobox input, `document.hasFocus()` false, no `focusin` at all. So a
+  // change of focus is announced here the way the browser would announce it.
+  const announceFocus = (prev) => {
+    const now = document.activeElement;
+    if (document.hasFocus() || now === prev) return;
+    if (prev && prev !== document.body) {
+      prev.dispatchEvent(new FocusEvent("blur", { bubbles: false, composed: true, relatedTarget: now }));
+      prev.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true, relatedTarget: now }));
+    }
+    if (now && now !== document.body) {
+      now.dispatchEvent(new FocusEvent("focus", { bubbles: false, composed: true, relatedTarget: prev }));
+      now.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true, relatedTarget: prev }));
+    }
+  };
   const el = document.elementFromPoint(x, y);
   if (!el) return false;
+  const before = document.activeElement;
   const base = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, view: window };
   const ptr = { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true };
   el.dispatchEvent(new PointerEvent("pointerover", ptr));
@@ -842,19 +862,30 @@ function pageClick(x, y) {
   el.dispatchEvent(new PointerEvent("pointermove", ptr));
   el.dispatchEvent(new MouseEvent("mousemove", base));
   el.dispatchEvent(new PointerEvent("pointerdown", { ...ptr, button: 0, buttons: 1 }));
-  el.dispatchEvent(new MouseEvent("mousedown", { ...base, button: 0, buttons: 1 }));
-  // A click on a field's padding or label should still land the caret in it.
-  const focusable = el.closest("input, textarea, select, button, a, [tabindex], [contenteditable]")
-    || el.querySelector("input, textarea, [contenteditable]")
-    || el;
-  if (typeof focusable.focus === "function") focusable.focus({ preventScroll: true });
+  const proceed = el.dispatchEvent(new MouseEvent("mousedown", { ...base, button: 0, buttons: 1 }));
+  // A click on a field's padding or label should still land the caret in it —
+  // unless the page's own mousedown handler cancelled the default, which is how
+  // a widget says it has placed focus itself (react-select focuses its hidden
+  // input that way); focusing the clicked element then would undo its work.
+  // The field inside is taken only when it is the only one: a click on empty
+  // space in a column holding several fields focused the first of them, which
+  // went unnoticed until focus became visible to widgets and a stray click
+  // opened a combobox's list (2026-10-15).
+  if (proceed) {
+    const inner = el.querySelectorAll("input, textarea, [contenteditable]");
+    const focusable = el.closest("input, textarea, select, button, a, [tabindex], [contenteditable]")
+      || (inner.length === 1 ? inner[0] : null)
+      || el;
+    if (typeof focusable.focus === "function") focusable.focus({ preventScroll: true });
+  }
+  announceFocus(before);
   el.dispatchEvent(new PointerEvent("pointerup", { ...ptr, button: 0, buttons: 0 }));
   el.dispatchEvent(new MouseEvent("mouseup", { ...base, button: 0, buttons: 0 }));
   el.dispatchEvent(new MouseEvent("click", { ...base, button: 0, buttons: 0, detail: 1 }));
   return true;
 }
 
-function pageType(text, replace) {
+function pageType(text, replace, noCommit) {
   const el = document.activeElement;
   if (!el) return false;
   // --replace: select what the field holds so the insertion below replaces
@@ -908,6 +939,18 @@ function pageType(text, replace) {
   // text (measured on a hosted checkout, 2026-09-18). So the commit is
   // announced too — `change`, then `focusout`/`blur` as events only, so the
   // caret stays where the next `key` expects it.
+  //
+  // Not for a combobox. What it holds is a search, its commit is picking an
+  // option, and a blur closes the list and clears the search — react-select
+  // and Headless UI both do. Typing into one would leave an empty field and
+  // no list to pick from (AlternativeTo's tag field, 2026-10-15). A widget
+  // with none of these attributes is told apart by `--no-commit` instead.
+  const combobox = noCommit
+    || el.getAttribute("role") === "combobox"
+    || el.hasAttribute("aria-autocomplete")
+    || el.hasAttribute("aria-expanded")
+    || (el.tagName === "INPUT" && el.list);
+  if (combobox) return true;
   el.dispatchEvent(new Event("change", { bubbles: true }));
   el.dispatchEvent(new FocusEvent("blur", { bubbles: false, composed: true }));
   el.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
@@ -934,7 +977,16 @@ function pageKey(key) {
       .filter((e) => !e.disabled && e.getClientRects().length);
     const i = all.indexOf(el);
     const next = all[(i + 1) % all.length];
-    if (next) next.focus();
+    if (next) {
+      next.focus();
+      // Same as pageClick: a background document moves focus silently.
+      if (!document.hasFocus() && document.activeElement === next) {
+        el.dispatchEvent(new FocusEvent("blur", { bubbles: false, composed: true, relatedTarget: next }));
+        el.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true, relatedTarget: next }));
+        next.dispatchEvent(new FocusEvent("focus", { bubbles: false, composed: true, relatedTarget: el }));
+        next.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true, relatedTarget: el }));
+      }
+    }
   }
   el.dispatchEvent(new KeyboardEvent("keyup", init));
   return true;

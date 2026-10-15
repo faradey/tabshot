@@ -91,6 +91,7 @@ func Run(cmd string, args []string) int {
 	full := fs.Bool("full", false, "screenshot at viewport size (for pictures that will be published)")
 	at := fs.String("at", "", "type/scroll/upload: X,Y point to act at")
 	replace := fs.Bool("replace", false, "type: replace the field's whole content instead of inserting at the caret")
+	noCommit := fs.Bool("no-commit", false, "type: insert only, without the change/blur that follows — for a search field that clears on blur")
 	pageURL := fs.String("url", "", "open: the page to bring up, on an allow-listed domain")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -192,6 +193,9 @@ func Run(cmd string, args []string) int {
 		body["text"] = pos[0]
 		if *replace {
 			body["replace"] = true
+		}
+		if *noCommit {
+			body["noCommit"] = true
 		}
 	case "key":
 		if !need(1) {

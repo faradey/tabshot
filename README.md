@@ -159,6 +159,12 @@ tabshot status  [--domain D]
   it rather than landing at the caret — synthetic keys cannot select all, and
   emptying a filled field one Backspace at a time from wherever the click left
   the caret is not reliable.
+  **A combobox's search field gets no commit.** After an insert `type` sends
+  `change` and `blur` (see Limits), and a combobox closes its list and clears
+  the search on blur — react-select and Headless UI both do. So a field with
+  `role="combobox"`, `aria-autocomplete`, `aria-expanded` or a `list` gets the
+  insert alone; type the search, then `key Enter` or click the option. A
+  home-made combobox with none of these attributes needs `--no-commit`.
 - `upload` hands local files to the file field or drop zone at `--at`, as
   if they had been picked in the file dialog. The dialog itself belongs to the
   OS and cannot be driven, so it is skipped: the files are read by the CLI,
@@ -210,6 +216,16 @@ tabshot status  [--domain D]
   without the dialog; see above.
 - Sites that require trusted input for a particular control will ignore the
   click. Most web apps do not.
+- **Focus events are announced by hand.** Chrome is usually not the frontmost
+  window while tabshot drives it, and a document without system focus moves
+  `activeElement` on `focus()` but fires no `focus`/`focusin`. Widgets that
+  open on focus then never open — measured 2026-10-15 on react-select:
+  mousedown handled, its input the active element, `document.hasFocus()`
+  false, no `focusin`, no list. So when a `click` or `key Tab` moves focus in
+  a background document, tabshot sends `blur`/`focusout` to the old element
+  and `focus`/`focusin` to the new one. And a click whose `mousedown` the page
+  cancelled no longer focuses the clicked element itself: cancelling is how a
+  widget says it placed focus on its own, and refocusing undid that.
 - **`type` announces a commit, not only an insert.** Measured 2026-09-18 on
   a hosted checkout (React): with `input` alone the text showed in the field
   while the page's validation reported it empty — email, last name, street

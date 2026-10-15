@@ -26,9 +26,11 @@ refuses a domain that is not on its allow list.
   tabshot status  [--domain D]                   extension connected? tab for D open?
   tabshot shot    --domain D [--out F] [--width N | --full] [--zoom X,Y,W,H]
   tabshot click   --domain D X Y                 left click at viewport point
-  tabshot type    --domain D [--at X,Y] [--replace] TEXT
+  tabshot type    --domain D [--at X,Y] [--replace] [--no-commit] TEXT
                                                  insert text into the focused (or clicked) field;
-                                                 --replace swaps the field's whole content for it
+                                                 --replace swaps the field's whole content for it;
+                                                 --no-commit skips the change/blur after it (search
+                                                 fields of comboboxes that clear on blur)
   tabshot key     --domain D Enter|Tab|Escape|Backspace|ArrowDown|...
   tabshot scroll  --domain D DX DY [--at X,Y]    scroll the scrollable under the point (default: centre)
   tabshot refresh --domain D
