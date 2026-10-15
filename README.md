@@ -179,6 +179,37 @@ tabshot status  [--domain D]
   Several files need an input with `multiple`; 40 MB per command together.
 - Flags come before positional arguments.
 
+## Session recordings
+
+Every command tabshot carries out is written down in the extension —
+action, point, typed text, key, file names, error — with a picture of the tab
+after it (JPEG, at most 1280 px wide). The extension's options page links to
+**Recorded sessions**: a list, a player that shows the page before each action
+with the click marked and the page after it, and **Download .webm**, which
+records that playback into a video in the page itself. Sessions are deleted
+there, one at a time or all; a **record** switch turns recording off.
+
+- **Sessions split on silence.** A command more than 15 minutes after the
+  previous one starts a new session. `tabshot session start [NAME]` starts and
+  names one; `tabshot session stop` closes it.
+- **One recording per caller.** Several agent sessions drive tabshot at once,
+  and a single shared recording interleaved them — a six-command test came back
+  with eight steps, two of them another session's clicks on another site
+  (2026-10-15). The CLI walks up its parent processes to the one named
+  `claude` and sends that as the caller; `TABSHOT_CALLER` overrides.
+- **Nothing leaves the browser.** Recordings live in the extension's IndexedDB
+  and are read only by its own page; the daemon and the CLI never see them.
+  Text typed into a password, card or one-time-code field is kept as its length
+  only. A page that left the allow list is recorded without its picture.
+- **Storage.** About 30–60 KB a frame. Past 500 MB the oldest finished sessions
+  are deleted first.
+- **Recording never slows a command.** The step is written after the answer
+  has gone back. All captures share one pacer, because Chrome fails a third
+  `captureVisibleTab` within a second, and a `--shot` and the step's frame come
+  back to back.
+- It is a step-by-step film, not video of the tab: `tabCapture` would need a
+  click on the icon to start and would record continuously.
+
 ## Limits
 
 - Only what the viewport shows is captured. Full-page captures would need the

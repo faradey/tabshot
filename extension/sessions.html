@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>tabshot sessions</title>
+<style>
+  :root { color-scheme: light dark; --line: #8884; --muted: #888; --accent: #2a7; }
+  body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
+  aside { border-right: 1px solid var(--line); overflow: auto; }
+  header { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 auto 0 0; }
+  .sess { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .sess:hover { background: #8881; }
+  .sess.sel { background: #2a72; }
+  .sess .name { font-weight: 600; }
+  .sess .meta { color: var(--muted); font-size: 12px; }
+  main { display: flex; flex-direction: column; min-width: 0; }
+  .bar { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; min-height: 0; }
+  canvas { max-width: 100%; max-height: 100%; }
+  .steps { height: 170px; overflow: auto; border-top: 1px solid var(--line); font: 12px/1.5 ui-monospace, monospace; }
+  .step { padding: 2px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step.cur { background: #2a73; }
+  .step.err { color: #d55; }
+  button, select { font: inherit; padding: 4px 10px; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  .rec { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<aside>
+  <header>
+    <h1>Sessions</h1>
+    <label class="rec"><input type="checkbox" id="recording"> record</label>
+    <button id="deleteAll" title="Delete every session">Clear all</button>
+  </header>
+  <div id="list"></div>
+</aside>
+<main>
+  <div class="bar">
+    <button id="play">▶ Play</button>
+    <button id="prev">◀</button>
+    <button id="next">▶|</button>
+    <label>speed <select id="speed"><option>0.5</option><option selected>1</option><option>2</option><option>4</option></select></label>
+    <span id="pos" style="color:var(--muted)"></span>
+    <span style="margin-left:auto"></span>
+    <button id="export">Download .webm</button>
+    <button id="delete">Delete session</button>
+  </div>
+  <div class="stage"><canvas id="screen" width="1280" height="800"></canvas></div>
+  <div class="steps" id="steps"><div class="empty">Pick a session on the left.</div></div>
+</main>
+<script src="sessions.js"></script>
+</body>
+</html>

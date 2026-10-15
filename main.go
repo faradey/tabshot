@@ -42,6 +42,11 @@ refuses a domain that is not on its allow list.
                                                  window opens on it. A screenshot of a page opened
                                                  this way needs "Capture without a click"
 
+  tabshot session start [NAME] | stop            name and begin a recorded session, or close it.
+                                                 Every command is recorded regardless; a gap of
+                                                 15 min starts a new session. Watch them on the
+                                                 extension's sessions page
+
 Common flags: --shot F (take a screenshot after the action), --timeout SEC.
 Flags go before positional arguments. Coordinates are CSS pixels of the
 viewport. Screenshots are downscaled to 800 px wide unless --width or --full
@@ -60,6 +65,8 @@ func main() {
 		code = daemon.Run(args)
 	case "token":
 		code = client.Token(args)
+	case "session":
+		code = client.Session(args)
 	case "status", "shot", "click", "type", "key", "scroll", "refresh", "resize", "open", "upload":
 		code = client.Run(cmd, args)
 	case "help", "-h", "--help":

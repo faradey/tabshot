@@ -2,7 +2,14 @@
 // each with pixels or ok/error. Nothing here returns page text, DOM, cookies or
 // URLs — the result objects below are the complete list of what can leave.
 
+importScripts("recorder.js");
+
 const DEFAULTS = { domains: [], port: 47831, token: "" };
+
+// The tab the last command acted on, and whether it typed into a secret field:
+// what recordStep needs after the answer has gone out. Reset per command.
+let recTabId = null;
+let recSecret = false;
 
 async function config() {
   return await chrome.storage.local.get(DEFAULTS);
@@ -35,6 +42,8 @@ async function pollLoop() {
       if (r.status === 204) continue;
       if (!r.ok) { await sleep(3000); continue; }
       const cmd = await r.json();
+      recTabId = null;
+      recSecret = false;
       let res;
       try {
         res = await handle(cmd, c);
@@ -47,6 +56,15 @@ async function pollLoop() {
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(res),
       }).catch(() => {});
+      // After the answer, so recording never slows a command down. A page
+      // that left the allow list is written down without its picture.
+      try {
+        let tab = recTabId != null ? await chrome.tabs.get(recTabId).catch(() => null) : null;
+        if (tab && !allowed(hostOf(tab), c.domains)) tab = null;
+        await recordStep(cmd, res, tab, recSecret);
+      } catch {
+        // a recording failure must never stop the poll loop
+      }
     }
   } finally {
     polling = false;
@@ -242,6 +260,9 @@ async function handle(cmd, c) {
   if (cmd.action === "status" && !cmd.domain) {
     return { ok: true, allowed: c.domains };
   }
+  if (cmd.action === "session") {
+    return await sessionCommand(cmd);
+  }
   const domain = String(cmd.domain || "").toLowerCase();
   if (!domain) return { ok: false, error: "no domain given" };
   if (!allowed(domain, c.domains)) {
@@ -249,7 +270,10 @@ async function handle(cmd, c) {
   }
   const find = () => chrome.tabs.query({ url: [`*://${domain}/*`, `*://*.${domain}/*`] });
   if (cmd.action === "open") {
-    return await open(cmd, domain, await find(), c.domains);
+    const r = await open(cmd, domain, await find(), c.domains);
+    const own = await ownTabs(await find());
+    if (own.length) recTabId = pickTab(own).id;
+    return r;
   }
   let tabs = await find();
   if (cmd.action === "status") {
@@ -297,6 +321,7 @@ async function handle(cmd, c) {
   }
   const out = { ok: true };
   const before = hostOf(tab);
+  recTabId = tab.id;
 
   switch (cmd.action) {
     case "shot":
@@ -333,6 +358,7 @@ async function handle(cmd, c) {
       }
       const typed = await exec(tab.id, frameId, pageType, [String(cmd.text ?? ""), !!cmd.replace, !!cmd.noCommit]);
       if (!typed) return { ok: false, error: "no editable element has focus (or no option of a select matches) — give --at X,Y" };
+      recSecret = typed === "secret";
       await settle(tab.id);
       break;
     }
@@ -584,9 +610,20 @@ async function front(tab) {
 
 // ---------------------------------------------------------------- screenshot
 
+// Chrome allows two captureVisibleTab calls a second and fails the third.
+// With session recording a `--shot` and the step's frame come back to back, so
+// every capture goes through here and keeps its distance from the last one.
+let lastCaptureAt = 0;
+async function captureTab(windowId, format) {
+  const wait = lastCaptureAt + 550 - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastCaptureAt = Date.now();
+  return await chrome.tabs.captureVisibleTab(windowId, format === "jpeg" ? { format: "jpeg", quality: 90 } : { format: "png" });
+}
+
 async function capture(tab, zoom, width) {
   const vp = await exec(tab.id, 0, pageMeasure, []);
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+  const dataUrl = await captureTab(tab.windowId, "png");
   const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
   const k = bmp.width / vp.w; // real capture scale (device pixel ratio, in practice)
 
@@ -925,6 +962,10 @@ function pageType(text, replace, noCommit) {
     || (el.tagName === "TEXTAREA")
     || (el.tagName === "INPUT" && !/^(button|submit|reset|checkbox|radio|file|image|range|color)$/i.test(el.type));
   if (!editable) return false;
+  // Told back so the session recording keeps only the length of what went
+  // into a password, card or one-time-code field, not the text itself.
+  const ac = String(el.getAttribute("autocomplete") || "").toLowerCase();
+  const done = (el.type === "password" || /^cc-|one-time-code|current-password|new-password/.test(ac)) ? "secret" : true;
   // execCommand inserts through the editing pipeline, so frameworks that
   // listen for `input` (React included) see it as if typed.
   if (!document.execCommand("insertText", false, text)) {
@@ -950,11 +991,11 @@ function pageType(text, replace, noCommit) {
     || el.hasAttribute("aria-autocomplete")
     || el.hasAttribute("aria-expanded")
     || (el.tagName === "INPUT" && el.list);
-  if (combobox) return true;
+  if (combobox) return done;
   el.dispatchEvent(new Event("change", { bubbles: true }));
   el.dispatchEvent(new FocusEvent("blur", { bubbles: false, composed: true }));
   el.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
-  return true;
+  return done;
 }
 
 function pageKey(key) {

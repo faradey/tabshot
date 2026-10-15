@@ -78,6 +78,80 @@ func Token(args []string) int {
 	return 0
 }
 
+// caller says which session of a coding agent sent the command, so the
+// extension keeps one recording per caller. Several Claude sessions drive
+// tabshot at once on this machine, and one shared recording interleaved them:
+// a test session of six commands came back with eight, two of them another
+// session's clicks on another site (2026-10-15). Each Bash call is a fresh
+// shell, so the stable thing is the agent process above it — found by walking
+// up the parents until one is named "claude". TABSHOT_CALLER overrides; with
+// neither, the grandparent pid stands in.
+func caller() string {
+	if v := strings.TrimSpace(os.Getenv("TABSHOT_CALLER")); v != "" {
+		return v
+	}
+	pid := os.Getppid()
+	first := 0
+	for i := 0; i < 8 && pid > 1; i++ {
+		out, err := exec.Command("ps", "-o", "ppid=,comm=", "-p", strconv.Itoa(pid)).Output()
+		if err != nil {
+			break
+		}
+		f := strings.Fields(strings.TrimSpace(string(out)))
+		if len(f) < 2 {
+			break
+		}
+		comm := filepath.Base(strings.Join(f[1:], " "))
+		if comm == "claude" {
+			return "claude:" + strconv.Itoa(pid)
+		}
+		parent, err := strconv.Atoi(f[0])
+		if err != nil {
+			break
+		}
+		if i == 0 {
+			first = parent
+		}
+		pid = parent
+	}
+	if first > 1 {
+		return "pid:" + strconv.Itoa(first)
+	}
+	return "pid:" + strconv.Itoa(os.Getppid())
+}
+
+// Session is `tabshot session start [NAME]` and `tabshot session stop`. Every
+// command is recorded by the extension anyway; start names a session (and
+// begins a new one), stop closes the current one. The recordings stay in the
+// browser and are watched on the extension's sessions page.
+func Session(args []string) int {
+	fs := flag.NewFlagSet("session", flag.ContinueOnError)
+	port := fs.Int("port", daemon.DefaultPort, "daemon port")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	pos := fs.Args()
+	if len(pos) == 0 || (pos[0] != "start" && pos[0] != "stop") {
+		fmt.Fprintln(os.Stderr, "usage: tabshot session start [NAME] | tabshot session stop")
+		return 2
+	}
+	body := map[string]any{"action": "session", "op": pos[0], "timeout": 30}
+	if pos[0] == "start" && len(pos) > 1 {
+		body["name"] = strings.Join(pos[1:], " ")
+	}
+	res, err := post(*port, body, 35*time.Second)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if !res.OK {
+		fmt.Fprintln(os.Stderr, "error:", res.Error)
+		return 1
+	}
+	fmt.Println("ok —", res.Note)
+	return 0
+}
+
 // Run is every tab command.
 func Run(cmd string, args []string) int {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
@@ -378,6 +452,9 @@ func post(port int, body map[string]any, wait time.Duration) (*result, error) {
 	token, err := daemon.ReadToken()
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := body["caller"]; !ok {
+		body["caller"] = caller()
 	}
 	enc, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:%d/cmd", port), bytes.NewReader(enc))
