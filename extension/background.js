@@ -426,17 +426,31 @@ async function handle(cmd, c) {
       out.note = NEEDS_CLICK;
       return out;
     }
-    const shot = await capture(tab, cmd.zoom, cmd.width != null ? num(cmd.width) : 0);
+    const width = cmd.width != null ? num(cmd.width) : 0;
+    let shot, failed;
+    try {
+      shot = await capture(tab, cmd.zoom, width);
+    } catch (err) {
+      failed = err;
+    }
     // A covered window hands back the last frame Chrome painted while clicks
     // and typing still land (README, Limits): on 2026-10-23 a form took three
     // rows of text and a tab switch, and every `--shot` showed it empty. The
     // only trace is a frame identical to the one before an action that should
-    // have changed it, so say so rather than let the picture be believed.
-    if (cmd.action !== "shot" && cmd.action !== "resize" && shot.frame === lastFrame.get(tab.id)) {
-      const stale = STALE_FRAME + (out.note ? ` (also: ${out.note})` : "");
-      out.note = stale;
+    // have changed it — or a capture that fails outright.
+    const stale = !failed && cmd.action !== "shot" && cmd.action !== "resize" && shot.frame === lastFrame.get(tab.id);
+    if (shot) lastFrame.set(tab.id, shot.frame);
+    if ((failed || stale) && (await coveredAllowed())) {
+      // The debugger renders the page itself, covered or not. Only the
+      // ordinary frame is remembered above: the two encoders differ byte for
+      // byte, and the next stale check compares ordinary frames.
+      shot = await capture(tab, cmd.zoom, width, true);
+      out.note = COVERED + (out.note ? ` (also: ${out.note})` : "");
+    } else if (failed) {
+      throw failed;
+    } else if (stale) {
+      out.note = STALE_FRAME + (out.note ? ` (also: ${out.note})` : "");
     }
-    lastFrame.set(tab.id, shot.frame);
     delete shot.frame;
     Object.assign(out, shot);
   }
@@ -445,7 +459,29 @@ async function handle(cmd, c) {
 
 // The last raw frame captured per tab, by digest: see the stale-frame check.
 const lastFrame = new Map();
-const STALE_FRAME = "frame identical to the previous shot of this tab — if the action should have changed the page, the window is likely covered and this is a stale frame: make it visible and shoot again before trusting it";
+const STALE_FRAME = "frame identical to the previous shot of this tab — if the action should have changed the page, the window is likely covered and this is a stale frame: make it visible and shoot again before trusting it (or turn on \"Capture covered windows\")";
+const COVERED = "the window is covered, so this frame was taken through the debugger";
+
+// "Capture covered windows" in the options. Chrome refuses `debugger` as an
+// optional permission (the request is declined without a prompt), so the
+// manifest holds it and this switch is what keeps it unused by default.
+async function coveredAllowed() {
+  return (await chrome.storage.local.get({ coveredCapture: false })).coveredCapture === true;
+}
+
+async function captureCovered(tabId) {
+  const target = { tabId };
+  await chrome.debugger.attach(target, "1.3");
+  try {
+    const r = await Promise.race([
+      chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png", fromSurface: true }),
+      sleep(8000).then(() => { throw new Error("debugger capture timed out"); }),
+    ]);
+    return "data:image/png;base64," + r.data;
+  } finally {
+    await chrome.debugger.detach(target).catch(() => {});
+  }
+}
 
 const NEEDS_CLICK = "tabshot opened the page in a window of its own — click the tabshot icon there (or turn on \"Capture without a click\"), then retry";
 
@@ -640,9 +676,9 @@ async function captureTab(windowId, format) {
   return await chrome.tabs.captureVisibleTab(windowId, format === "jpeg" ? { format: "jpeg", quality: 90 } : { format: "png" });
 }
 
-async function capture(tab, zoom, width) {
+async function capture(tab, zoom, width, covered = false) {
   const vp = await exec(tab.id, 0, pageMeasure, []);
-  const dataUrl = await captureTab(tab.windowId, "png");
+  const dataUrl = covered ? await captureCovered(tab.id) : await captureTab(tab.windowId, "png");
   const frame = await digest(dataUrl);
   const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
   const k = bmp.width / vp.w; // real capture scale (device pixel ratio, in practice)

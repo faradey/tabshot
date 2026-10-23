@@ -232,6 +232,11 @@ there, one at a time or all; a **record** switch turns recording off.
   action's `--shot` that comes back byte-identical to the previous shot of
   the same tab now carries a `note:` saying so; it cannot tell a stale frame
   from an action that really changed nothing, so it warns rather than fails.
+  With **"Capture covered windows"** on in the options, that frame — or a
+  capture that failed — is taken again through the debugger
+  (`Page.captureScreenshot`, attached for the one picture), and the note says
+  so. Chrome refuses `debugger` as an optional permission, so the manifest
+  holds it; the switch is off by default and nothing uses it until it is on.
 - **A tab mid-redirect is on neither host.** A navigation that hops through
   another subdomain (a sign-in bounce) leaves no tab on the domain asked for
   for a second or two. While any tab is still loading, a command waits up to

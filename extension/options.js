@@ -22,6 +22,7 @@ async function load() {
   $("port").value = c.port;
   $("token").value = c.token;
   $("noclick").checked = await chrome.permissions.contains({ origins: ["<all_urls>"] });
+  $("covered").checked = (await chrome.storage.local.get({ coveredCapture: false })).coveredCapture;
   const granted = await chrome.permissions.getAll();
   const missing = c.domains.filter((d) => !granted.origins.includes(`*://${d}/*`));
   let s = c.lastPoll ? `Last contact with the daemon: ${new Date(c.lastPoll).toLocaleTimeString()}.` : "Never reached the daemon yet.";
@@ -77,6 +78,14 @@ $("noclick").addEventListener("change", async (e) => {
   }
   await load();
   $("state").textContent += e.target.checked ? " Capturing without a click." : " A click on the icon is needed again.";
+});
+
+// `debugger` cannot be an optional permission in Chrome, so the manifest holds
+// it and this switch decides whether it is ever used.
+$("covered").addEventListener("change", async (e) => {
+  await chrome.storage.local.set({ coveredCapture: e.target.checked });
+  await load();
+  $("state").textContent += e.target.checked ? " Covered windows are captured through the debugger." : " Covered windows give stale frames again.";
 });
 
 load();

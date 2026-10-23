@@ -3,7 +3,7 @@
   "name": "tabshot",
   "version": "0.2.0",
   "description": "Lets a local command line see pixels of one allow-listed tab and click, type and scroll in it. It never hands over text, DOM, cookies or URLs.",
-  "permissions": ["activeTab", "tabs", "scripting", "storage", "alarms", "webNavigation"],
+  "permissions": ["activeTab", "tabs", "scripting", "storage", "alarms", "webNavigation", "debugger"],
   "host_permissions": ["http://127.0.0.1/*"],
   "optional_host_permissions": ["*://*/*", "<all_urls>"],
   "background": { "service_worker": "background.js" },

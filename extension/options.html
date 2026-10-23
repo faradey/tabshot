@@ -42,6 +42,16 @@ change data on all websites; what it acts on is still only the allow list
 above, checked by this extension's own code. Turn it off to give the access
 back.</p>
 
+<label><input id="covered" type="checkbox" style="width:auto;margin-right:8px">Capture covered windows</label>
+<p class="hint">Chrome stops painting a window that other windows cover
+completely, and a normal capture then returns the last frame it painted, or
+fails. Turned on, the <code>debugger</code> permission is used as a fallback:
+when a capture fails, or comes back identical to the previous one right after an
+action, the tab is attached for that one picture and detached at once. While
+attached Chrome shows its "started debugging this browser" bar. Nothing but the
+screenshot command is ever sent. Chrome cannot grant <code>debugger</code> on
+request, so the extension always holds it; off, it is never used.</p>
+
 <label>Close tabshot's own windows after <span class="hint">(minutes idle; 0 = never)</span></label>
 <input id="idle" type="number" min="0" step="1">
 <p class="hint">Commands run in windows tabshot opens itself; your own tabs are
