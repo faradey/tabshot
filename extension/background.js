@@ -426,10 +426,26 @@ async function handle(cmd, c) {
       out.note = NEEDS_CLICK;
       return out;
     }
-    Object.assign(out, await capture(tab, cmd.zoom, cmd.width != null ? num(cmd.width) : 0));
+    const shot = await capture(tab, cmd.zoom, cmd.width != null ? num(cmd.width) : 0);
+    // A covered window hands back the last frame Chrome painted while clicks
+    // and typing still land (README, Limits): on 2026-10-23 a form took three
+    // rows of text and a tab switch, and every `--shot` showed it empty. The
+    // only trace is a frame identical to the one before an action that should
+    // have changed it, so say so rather than let the picture be believed.
+    if (cmd.action !== "shot" && cmd.action !== "resize" && shot.frame === lastFrame.get(tab.id)) {
+      const stale = STALE_FRAME + (out.note ? ` (also: ${out.note})` : "");
+      out.note = stale;
+    }
+    lastFrame.set(tab.id, shot.frame);
+    delete shot.frame;
+    Object.assign(out, shot);
   }
   return out;
 }
+
+// The last raw frame captured per tab, by digest: see the stale-frame check.
+const lastFrame = new Map();
+const STALE_FRAME = "frame identical to the previous shot of this tab — if the action should have changed the page, the window is likely covered and this is a stale frame: make it visible and shoot again before trusting it";
 
 const NEEDS_CLICK = "tabshot opened the page in a window of its own — click the tabshot icon there (or turn on \"Capture without a click\"), then retry";
 
@@ -470,7 +486,10 @@ async function open(cmd, domain, tabs, allowList) {
       out.note = NEEDS_CLICK;
       return out;
     }
-    Object.assign(out, await capture(tab, null, cmd.width != null ? num(cmd.width) : 0));
+    const shot = await capture(tab, null, cmd.width != null ? num(cmd.width) : 0);
+    lastFrame.set(tab.id, shot.frame);
+    delete shot.frame;
+    Object.assign(out, shot);
   }
   return out;
 }
@@ -624,6 +643,7 @@ async function captureTab(windowId, format) {
 async function capture(tab, zoom, width) {
   const vp = await exec(tab.id, 0, pageMeasure, []);
   const dataUrl = await captureTab(tab.windowId, "png");
+  const frame = await digest(dataUrl);
   const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
   const k = bmp.width / vp.w; // real capture scale (device pixel ratio, in practice)
 
@@ -654,7 +674,13 @@ async function capture(tab, zoom, width) {
     png: await toBase64(blob),
     viewport: { w: vp.w, h: vp.h, dpr: vp.dpr },
     image: { w: ow, h: oh, scale, origin: { x: sx, y: sy } },
+    frame,
   };
+}
+
+async function digest(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));

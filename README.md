@@ -228,7 +228,10 @@ there, one at a time or all; a **record** switch turns recording off.
   in a row showed a form with two fields empty while the page had them
   filled and rates loaded — Chrome handed back the last frame it had
   painted. If a picture contradicts the `ok` of the actions before it, make
-  the window visible and shoot again before acting on the picture.
+  the window visible and shoot again before acting on the picture. An
+  action's `--shot` that comes back byte-identical to the previous shot of
+  the same tab now carries a `note:` saying so; it cannot tell a stale frame
+  from an action that really changed nothing, so it warns rather than fails.
 - **A tab mid-redirect is on neither host.** A navigation that hops through
   another subdomain (a sign-in bounce) leaves no tab on the domain asked for
   for a second or two. While any tab is still loading, a command waits up to
