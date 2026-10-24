@@ -547,8 +547,18 @@ async function open(cmd, domain, tabs, allowList) {
       out.note = NEEDS_CLICK;
       return out;
     }
-    const shot = await capture(tab, null, cmd.width != null ? num(cmd.width) : 0);
-    lastFrame.set(tab.id, shot.frame);
+    const width = cmd.width != null ? num(cmd.width) : 0;
+    let shot;
+    try {
+      shot = await capture(tab, null, width);
+      lastFrame.set(tab.id, shot.frame);
+    } catch (err) {
+      // `open` lands in a window of tabshot's own, often behind the owner's:
+      // "image readback failed" here on 2026-10-24.
+      if (!(await coveredAllowed())) throw err;
+      shot = await capture(tab, null, width, true);
+      out.note = `${COVERED} (the normal capture failed: ${safeError(err)})`;
+    }
     delete shot.frame;
     Object.assign(out, shot);
   }
