@@ -17,6 +17,16 @@ async function config() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Rejects when `p` has not settled within `ms`. The work behind `p` is not
+// cancelled — nothing here can cancel it — but whoever waits stops waiting.
+function within(p, ms, what) {
+  let timer;
+  return Promise.race([
+    p,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} did not finish within ${ms / 1000}s`)), ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 // ---------------------------------------------------------------- poll loop
 
 let polling = false;
@@ -44,9 +54,14 @@ async function pollLoop() {
       const cmd = await r.json();
       recTabId = null;
       recSecret = false;
+      // Nothing a command or its recording waits on may hold the loop: one
+      // promise that never settles meant no poll ever again, and every later
+      // command answered "extension is not connected" (2026-10-24, a click
+      // in a covered window after a debugger capture). The CLI gives up at
+      // 60 s, so a command gets 55.
       let res;
       try {
-        res = await handle(cmd, c);
+        res = await within(handle(cmd, c), 55000, "the command");
       } catch (e) {
         res = { ok: false, error: safeError(e) };
       }
@@ -56,12 +71,16 @@ async function pollLoop() {
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(res),
       }).catch(() => {});
+      if (cmd.action === "reload" && res.ok) {
+        chrome.runtime.reload();
+        return;
+      }
       // After the answer, so recording never slows a command down. A page
       // that left the allow list is written down without its picture.
       try {
         let tab = recTabId != null ? await chrome.tabs.get(recTabId).catch(() => null) : null;
         if (tab && !allowed(hostOf(tab), c.domains)) tab = null;
-        await recordStep(cmd, res, tab, recSecret);
+        await within(recordStep(cmd, res, tab, recSecret), 15000, "recording the step");
       } catch {
         // a recording failure must never stop the poll loop
       }
@@ -257,6 +276,10 @@ async function sweep() {
 // ---------------------------------------------------------------- commands
 
 async function handle(cmd, c) {
+  if (cmd.action === "reload") {
+    // The reload itself happens in pollLoop, after this answer is sent.
+    return { ok: true, note: "the extension is reloading — give it a few seconds" };
+  }
   if (cmd.action === "status" && !cmd.domain) {
     return { ok: true, allowed: c.domains };
   }
@@ -445,7 +468,8 @@ async function handle(cmd, c) {
       // ordinary frame is remembered above: the two encoders differ byte for
       // byte, and the next stale check compares ordinary frames.
       shot = await capture(tab, cmd.zoom, width, true);
-      out.note = COVERED + (out.note ? ` (also: ${out.note})` : "");
+      const why = failed ? `the normal capture failed: ${safeError(failed)}` : "the normal capture was a stale frame";
+      out.note = `${COVERED} (${why})` + (out.note ? ` (also: ${out.note})` : "");
     } else if (failed) {
       throw failed;
     } else if (stale) {
@@ -471,12 +495,13 @@ async function coveredAllowed() {
 
 async function captureCovered(tabId) {
   const target = { tabId };
-  await chrome.debugger.attach(target, "1.3");
+  await within(chrome.debugger.attach(target, "1.3"), 5000, "attaching the debugger");
   try {
-    const r = await Promise.race([
+    const r = await within(
       chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png", fromSurface: true }),
-      sleep(8000).then(() => { throw new Error("debugger capture timed out"); }),
-    ]);
+      8000,
+      "the debugger capture",
+    );
     return "data:image/png;base64," + r.data;
   } finally {
     await chrome.debugger.detach(target).catch(() => {});
@@ -673,7 +698,14 @@ async function captureTab(windowId, format) {
   const wait = lastCaptureAt + 550 - Date.now();
   if (wait > 0) await sleep(wait);
   lastCaptureAt = Date.now();
-  return await chrome.tabs.captureVisibleTab(windowId, format === "jpeg" ? { format: "jpeg", quality: 90 } : { format: "png" });
+  // A covered window can leave this unanswered instead of failing; a timeout
+  // turns that into a failure, which the shot path retakes through the
+  // debugger when "Capture covered windows" is on.
+  return await within(
+    chrome.tabs.captureVisibleTab(windowId, format === "jpeg" ? { format: "jpeg", quality: 90 } : { format: "png" }),
+    5000,
+    "capturing the tab",
+  );
 }
 
 async function capture(tab, zoom, width, covered = false) {

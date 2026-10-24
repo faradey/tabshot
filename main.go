@@ -19,6 +19,8 @@ const usage = `tabshot — pixels in, coordinates out; the page itself never lea
 
   tabshot serve [--port N]                       run the local daemon (foreground)
   tabshot token [--copy]                         print (or copy) the token the extension must be given
+  tabshot reload                                 make the extension reload itself from disk (after
+                                                 a change to its code; not for one that has hung)
 
 Every command below names a domain; the extension finds the tab itself and
 refuses a domain that is not on its allow list.
@@ -67,6 +69,8 @@ func main() {
 		code = client.Token(args)
 	case "session":
 		code = client.Session(args)
+	case "reload":
+		code = client.Reload(args)
 	case "status", "shot", "click", "type", "key", "scroll", "refresh", "resize", "open", "upload":
 		code = client.Run(cmd, args)
 	case "help", "-h", "--help":

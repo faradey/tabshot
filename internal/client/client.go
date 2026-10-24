@@ -152,6 +152,28 @@ func Session(args []string) int {
 	return 0
 }
 
+// Reload is `tabshot reload`: the extension answers, then reloads itself and
+// so picks up its code from disk, without a visit to chrome://extensions. It
+// needs a live extension — one stuck mid-command never sees the request.
+func Reload(args []string) int {
+	fs := flag.NewFlagSet("reload", flag.ContinueOnError)
+	port := fs.Int("port", daemon.DefaultPort, "daemon port")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	res, err := post(*port, map[string]any{"action": "reload", "timeout": 30}, 35*time.Second)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if !res.OK {
+		fmt.Fprintln(os.Stderr, "error:", res.Error)
+		return 1
+	}
+	fmt.Println("ok —", res.Note)
+	return 0
+}
+
 // Run is every tab command.
 func Run(cmd string, args []string) int {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
