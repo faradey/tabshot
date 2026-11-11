@@ -1,2 +1,5 @@
 /tabshot
+/dist/
 *.png
+!/extension/icons/*.png
+!/store/*.png

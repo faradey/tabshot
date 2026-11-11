@@ -81,7 +81,9 @@ $("noclick").addEventListener("change", async (e) => {
 });
 
 // `debugger` cannot be an optional permission in Chrome, so the manifest holds
-// it and this switch decides whether it is ever used.
+// it and this switch decides whether it is ever used. A build packaged without
+// it (bin/package-extension.sh --no-debugger) has no switch to show.
+if (!chrome.debugger) $("covered-block").hidden = true;
 $("covered").addEventListener("change", async (e) => {
   await chrome.storage.local.set({ coveredCapture: e.target.checked });
   await load();

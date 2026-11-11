@@ -12,7 +12,10 @@ go vet ./...
 tabshot serve                # daemon on 127.0.0.1:47831, creates ~/.config/tabshot/token (0600)
 tabshot reload               # extension reloads itself from disk after a change to extension/*.js
 tabshot status [--domain D]
+bin/package-extension.sh [--no-debugger]   # Chrome Web Store zip → dist/; checks description ≤132 chars and icons
 ```
+
+- Store submission texts (listing, permission justifications, reviewer test steps) live in `store/LISTING.md`; privacy policy in `PRIVACY.md`. A new permission or a new kind of data leaving the extension must be reflected in both. Icons are rendered from `store/*.svg` with `rsvg-convert`.
 
 - **Rebuilding on macOS while the daemon runs from that binary: `rm tabshot` first, then `go build -o tabshot .`** Overwriting in place keeps the inode and macOS kills the restarted daemon with `OS_REASON_CODESIGNING` (launchd: `spawn failed`, port closed).
 - There are no automated tests. Verify against a real Chrome: load `extension/` unpacked, paste the token in options, allow a domain, click the toolbar icon on the tab (badge `on`), then drive it with `tabshot shot|click|type|...`.

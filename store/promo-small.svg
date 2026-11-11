@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 280" width="440" height="280">
+  <!-- Small promo tile, 440×280. -->
+  <rect width="440" height="280" fill="#0f172a"/>
+  <g transform="translate(28 76)">
+    <rect width="128" height="128" rx="26" fill="#1d4ed8"/>
+    <g fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M24 42 V24 H42"/>
+      <path d="M86 24 H104 V42"/>
+      <path d="M104 86 V104 H86"/>
+      <path d="M42 104 H24 V86"/>
+    </g>
+    <circle cx="64" cy="64" r="14" fill="#fff"/>
+  </g>
+  <text x="180" y="132" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="44" font-weight="700" fill="#fff">tabshot</text>
+  <text x="180" y="166" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#cbd5e1">Pixels in, coordinates out.</text>
+  <text x="180" y="190" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#cbd5e1">The page stays in your browser.</text>
+</svg>
