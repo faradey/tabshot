@@ -115,7 +115,13 @@ tabshot resize  --domain D W H
 tabshot upload  --domain D --at X,Y FILE...
 tabshot open    --url URL [--shot F]
 tabshot status  [--domain D]
+tabshot reload
 ```
+
+- `reload` makes the extension reload itself from disk, for after a change
+  to its code — no visit to `chrome://extensions`. It needs a live extension:
+  one stuck mid-command never sees the request. Like any extension reload, it
+  ends every click grant and forgets tabshot's windows.
 
 - `open` brings a page up on request, so nobody has to open the tab first.
   The URL's host is the domain, checked against the allow list like any
@@ -288,8 +294,11 @@ there, one at a time or all; a **record** switch turns recording off.
 Trust is per machine: whoever can read `~/.config/tabshot/token` can drive
 the allow-listed tabs, which is the same set of people who can run the CLI.
 The daemon binds to loopback only. The extension asks for `activeTab`,
-`tabs`, `scripting`, `storage`, `alarms`, `webNavigation` and host access to
-exactly the allow list; no `cookies`, no `debugger`, no `webRequest`. By
+`tabs`, `scripting`, `storage`, `alarms`, `webNavigation`, `debugger` and host
+access to exactly the allow list; no `cookies`, no `webRequest`. `debugger` is
+in the manifest only because Chrome refuses it as an optional permission:
+nothing attaches it unless **"Capture covered windows"** is on, and then only
+for one `Page.captureScreenshot` of an allowed tab (see Limits). By
 default no `<all_urls>` either, and a tab can be photographed only after you
 clicked the icon on it. **"Capture without a click"** in the options is the
 one exception, and it is yours to switch: it asks Chrome for `<all_urls>` —
