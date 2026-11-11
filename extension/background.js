@@ -120,10 +120,36 @@ chrome.runtime.onMessage.addListener(() => { pollLoop(); });
 // extension reload clears exactly as it clears Chrome's grants), because the
 // badge cannot say it: when the tab moves to another origin Chrome revokes the
 // grant, and a badge left at "on" then promised a capture that failed.
+//
+// The click toggles. A second click on a shared tab stops sharing it: Chrome's
+// grant cannot be taken back, but every command looks the tab up in `shares`
+// (clickedTabs, canCapture), so without the record the grant goes unused. A
+// click on a tab off the allow list shares nothing — commands refuse that
+// domain anyway — and the badge says "no" for a moment instead of a
+// misleading "on".
 chrome.action.onClicked.addListener(async (tab) => {
+  const shares = await loadShares();
+  if (shares[tab.id] !== undefined && shares[tab.id] === originOf(tab.url || "")) {
+    await forgetShare(tab.id);
+    await chrome.action.setBadgeText({ tabId: tab.id, text: "" });
+    await chrome.action.setTitle({ tabId: tab.id, title: "tabshot: share this tab" });
+    return;
+  }
+  const { domains } = await config();
+  if (!onAllowList(tab, domains)) {
+    await chrome.action.setBadgeText({ tabId: tab.id, text: "no" });
+    await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#c33" });
+    await chrome.action.setTitle({ tabId: tab.id, title: "tabshot: this site is not on the allow list (extension options)" });
+    setTimeout(() => {
+      chrome.action.setBadgeText({ tabId: tab.id, text: "" }).catch(() => {});
+      chrome.action.setTitle({ tabId: tab.id, title: "tabshot: share this tab" }).catch(() => {});
+    }, 3000);
+    return;
+  }
   await rememberShare(tab.id, tab.url);
   await chrome.action.setBadgeText({ tabId: tab.id, text: "on" });
   await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#2a7" });
+  await chrome.action.setTitle({ tabId: tab.id, title: "tabshot: tab shared — click to stop sharing" });
 });
 
 // The grant ends when the tab leaves its origin or closes; so does the record.
@@ -136,16 +162,19 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   await chrome.storage.session.set({ shares });
   try {
     await chrome.action.setBadgeText({ tabId, text: "" });
+    await chrome.action.setTitle({ tabId, title: "tabshot: share this tab" });
   } catch {
     // the tab went away meanwhile
   }
 });
-chrome.tabs.onRemoved.addListener(async (tabId) => {
+chrome.tabs.onRemoved.addListener((tabId) => forgetShare(tabId));
+
+async function forgetShare(tabId) {
   const shares = await loadShares();
   if (shares[tabId] === undefined) return;
   delete shares[tabId];
   await chrome.storage.session.set({ shares });
-});
+}
 
 async function loadShares() {
   const { shares } = await chrome.storage.session.get({ shares: {} });
@@ -488,8 +517,10 @@ const COVERED = "the window is covered, so this frame was taken through the debu
 
 // "Capture covered windows" in the options. Chrome refuses `debugger` as an
 // optional permission (the request is declined without a prompt), so the
-// manifest holds it and this switch is what keeps it unused by default.
+// manifest holds it and this switch is what keeps it unused by default. A
+// build packaged without `debugger` has no chrome.debugger at all.
 async function coveredAllowed() {
+  if (!chrome.debugger) return false;
   return (await chrome.storage.local.get({ coveredCapture: false })).coveredCapture === true;
 }
 

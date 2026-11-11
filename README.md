@@ -70,7 +70,9 @@ tabshot icon in the toolbar once — the badge turns to `on`. That click is
 Chrome's own `activeTab` grant, which is what `captureVisibleTab` demands; a
 host permission for the page is not enough. It lasts while the tab stays on
 that origin and dies with the tab or the browser, so after a restart it is one
-click again. Reloading the extension ends every grant too.
+click again. Reloading the extension ends every grant too. A second click on
+a shared tab stops sharing it (the badge goes off); a click on a tab whose site
+is not on the allow list shares nothing, and the badge says `no` for a moment.
 
 The extension records which origin each click was on. When the tab moves to
 another site (a back arrow that leaves the page, a login redirect) Chrome ends
