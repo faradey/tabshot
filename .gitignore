@@ -1,5 +1,8 @@
 /tabshot
 /dist/
+.DS_Store
+node_modules/
+package-lock.json
 *.png
 !/extension/icons/*.png
-!/store/*.png
+!/store/**/*.png

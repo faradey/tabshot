@@ -1,0 +1,12 @@
+{
+  "name": "tabshot-store-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Regenerates store/screenshots/*.png from a real run of the extension",
+  "scripts": {
+    "shoot": "node shoot.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.49.1"
+  }
+}

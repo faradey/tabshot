@@ -39,12 +39,16 @@ Requires the tabshot command-line program on the same computer. Without it the e
 **Graphics:**
 - Store icon: `extension/icons/icon128.png` (128×128, 96×96 artwork with padding)
 - Small promo tile: `store/promo-small.png` (440×280)
-- Screenshots: at least one, 1280×800 or 640×400 — not in the repo, see below
+- Screenshots (1280×800, 24-bit PNG), in this order:
+  1. `store/screenshots/1-terminal.png` — the CLI transcript beside the PNG it got back
+  2. `store/screenshots/2-sessions.png` — the recorded session, paused on a click
+  3. `store/screenshots/3-options.png` — options with an example allow list
 
-Screenshot ideas, in order of value:
-1. Recorded sessions page playing back a session, a click marked on the frame.
-2. A terminal running `tabshot shot` / `tabshot click` next to the browser window it drives.
-3. The options page with an allow list filled in (example domains, no real token).
+  All three come from a real run: the packaged extension in Chrome for Testing,
+  driven by the CLI through a separate daemon, on a demo admin page (a fictional
+  shop served locally under `admin.example.com`). To regenerate after a UI
+  change: `npm install --prefix store/screenshots/src`, then
+  `node store/screenshots/src/shoot.mjs` (options are in the script's header).
 
 **Homepage URL:** https://github.com/faradey/tabshot
 **Support URL:** https://github.com/faradey/tabshot/issues

@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Order #1042 · Pinecrest Outdoor</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<nav>
+  <div class="brand"><i></i>Pinecrest Outdoor</div>
+  <a href="#">Dashboard</a>
+  <a class="on" href="orders.html">Orders</a>
+  <a href="#">Products</a>
+  <a href="#">Customers</a>
+  <a href="#">Reports</a>
+  <a href="#">Settings</a>
+</nav>
+<main>
+  <h1>Order #1042 <span id="status" class="pill paid" style="vertical-align:middle">Paid</span></h1>
+  <div class="sub">Nov 10 · Dana Whitfield · dana@example.net</div>
+  <div id="done" class="banner hidden">Refund of $<span id="doneAmt"></span> issued — the customer has been notified.</div>
+  <div class="grid2">
+    <div>
+      <div class="box">
+        <h2>Items</h2>
+        <div class="line"><span>Trail tent, 2-person × 1</span><span>$119.00</span></div>
+        <div class="line"><span>Camp mug, enamel × 2</span><span>$18.00</span></div>
+        <div class="line"><span>Shipping</span><span>$11.00</span></div>
+        <div class="line"><span>Total</span><span>$148.00</span></div>
+      </div>
+      <div class="box">
+        <h2>Shipping</h2>
+        <div>Dana Whitfield<br>18 Cedar Lane<br>Portland, OR 97205</div>
+      </div>
+    </div>
+    <div>
+      <div class="box" id="actions">
+        <h2>Actions</h2>
+        <button id="refundBtn" onclick="document.getElementById('refund').classList.remove('hidden')">Refund…</button>
+        <button>Print packing slip</button>
+      </div>
+      <div class="box hidden" id="refund">
+        <h2>Refund</h2>
+        <label for="amount">Amount</label>
+        <input id="amount" placeholder="0.00">
+        <label for="reason">Reason</label>
+        <select id="reason">
+          <option value="">Choose…</option>
+          <option>Arrived damaged</option>
+          <option>Wrong size</option>
+          <option>Changed mind</option>
+        </select>
+        <div style="margin-top:16px"><button id="issue" class="primary" onclick="issue()">Issue refund</button></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+function issue() {
+  const amt = document.getElementById('amount').value || '0.00';
+  document.getElementById('doneAmt').textContent = amt;
+  document.getElementById('done').classList.remove('hidden');
+  document.getElementById('refund').classList.add('hidden');
+  const s = document.getElementById('status');
+  s.textContent = 'Refunded'; s.className = 'pill refunded';
+}
+</script>
+</body></html>
