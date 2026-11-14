@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "tabshot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Lets a local CLI photograph allow-listed tabs and click, type, scroll in them. Never hands over page text, cookies or URLs.",
   "homepage_url": "https://github.com/faradey/tabshot",
   "icons": {
