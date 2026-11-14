@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const TEST_ORIGIN = "*://*.test/*";
 
 function normalise(text) {
   const out = [];
@@ -16,12 +17,14 @@ function origins(domains) {
 }
 
 async function load() {
-  const c = await chrome.storage.local.get({ domains: [], port: 47831, token: "", lastPoll: 0, lastError: "", idleMinutes: 60 });
+  const c = await chrome.storage.local.get({ domains: [], port: 47831, token: "", lastPoll: 0, lastError: "", idleMinutes: 60, acceptTest: false });
   $("domains").value = c.domains.join("\n");
   $("idle").value = c.idleMinutes;
   $("port").value = c.port;
   $("token").value = c.token;
   $("noclick").checked = await chrome.permissions.contains({ origins: ["<all_urls>"] });
+  // Shown on only while the access is there, the same test config() applies.
+  $("acceptTest").checked = c.acceptTest && (await chrome.permissions.contains({ origins: [TEST_ORIGIN] }));
   $("covered").checked = (await chrome.storage.local.get({ coveredCapture: false })).coveredCapture;
   const granted = await chrome.permissions.getAll();
   const missing = c.domains.filter((d) => !granted.origins.includes(`*://${d}/*`));
@@ -78,6 +81,31 @@ $("noclick").addEventListener("change", async (e) => {
   }
   await load();
   $("state").textContent += e.target.checked ? " Capturing without a click." : " A click on the icon is needed again.";
+});
+
+// Same shape as the switch above: the prompt comes from this change, and the
+// switch is stored only once Chrome has granted or removed the access, so the
+// stored value never claims access that is not there.
+$("acceptTest").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  try {
+    if (on) {
+      if (!(await chrome.permissions.request({ origins: [TEST_ORIGIN] }))) {
+        e.target.checked = false;
+        $("state").textContent = ".test hosts stay off: Chrome did not grant access.";
+        return;
+      }
+    } else {
+      await chrome.permissions.remove({ origins: [TEST_ORIGIN] });
+    }
+  } catch (err) {
+    e.target.checked = !on;
+    $("state").textContent = `Could not change the access: ${err.message}`;
+    return;
+  }
+  await chrome.storage.local.set({ acceptTest: on });
+  await load();
+  $("state").textContent += on ? " .test hosts are on the allow list." : " .test hosts are off again.";
 });
 
 // `debugger` cannot be an optional permission in Chrome, so the manifest holds

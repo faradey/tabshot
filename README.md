@@ -13,7 +13,8 @@ What the command line **can** receive:
 
 What it **cannot** receive, by the shape of the protocol rather than by
 policy: page text, the DOM, cookies, form values, URLs, the list of other
-tabs, or anything from a domain not on the allow list. The extension's
+tabs, or anything from a domain not on the allow list (a `.test` host counts
+only while "Accept .test hosts" is on). The extension's
 result objects are the whole list above; there is no "evaluate" and no
 "get text".
 
@@ -45,7 +46,9 @@ tabshot serve  ──── long-poll ────►  extension (service worker
 
 The allow list lives in the extension's options and is also exactly the set
 of host permissions the extension holds: adding a domain prompts Chrome,
-removing one gives the permission back.
+removing one gives the permission back. The one extra entry is the whole
+`.test` TLD, behind its own switch ("Accept .test hosts", off by default); it
+holds `*://*.test/*` only while that switch is on.
 
 ## Install
 
@@ -64,6 +67,8 @@ closed (measured 2026-10-10).
 Then in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** →
 the `extension/` directory. Open the extension's options, paste the token,
 list the allowed domains, Save (Chrome asks for host access to those domains).
+Stands on `.test` need not be listed one by one: tick **Accept .test hosts**
+(Chrome asks for access to every `*.test` site, once).
 
 Then **share the tab**: open the page you want photographed and click the
 tabshot icon in the toolbar once — the badge turns to `on`. That click is
@@ -297,7 +302,10 @@ Trust is per machine: whoever can read `~/.config/tabshot/token` can drive
 the allow-listed tabs, which is the same set of people who can run the CLI.
 The daemon binds to loopback only. The extension asks for `activeTab`,
 `tabs`, `scripting`, `storage`, `alarms`, `webNavigation`, `debugger` and host
-access to exactly the allow list; no `cookies`, no `webRequest`. `debugger` is
+access to exactly the allow list, plus `*.test` only behind the "Accept .test
+hosts" switch; no `cookies`, no `webRequest`. That switch gives up the
+per-domain limit on purpose: every `.test` site can then be photographed and
+acted on, so it stays off unless the owner wants it. `debugger` is
 in the manifest only because Chrome refuses it as an optional permission:
 nothing attaches it unless **"Capture covered windows"** is on, and then only
 for one `Page.captureScreenshot` of an allowed tab (see Limits). By

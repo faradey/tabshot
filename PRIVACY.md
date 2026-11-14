@@ -1,6 +1,6 @@
 # tabshot privacy policy
 
-*Last updated: 2026-11-11*
+*Last updated: 2026-11-14*
 
 tabshot is a browser extension paired with a command-line program that you run
 on your own computer. This policy covers the extension.
@@ -9,7 +9,8 @@ on your own computer. This policy covers the extension.
 
 - **Screenshots of tabs on domains you allow.** When the tabshot program on
   your computer asks for one, the extension captures the visible part of a tab
-  on a domain from your allow list and sends the image to that program at
+  on a domain from your allow list (or on any `.test` domain, if you switched
+  on "Accept .test hosts") and sends the image to that program at
   `http://127.0.0.1` (your own machine).
 - **The actions it is asked to perform.** Clicks, typed text, keys, scrolls
   and file names of uploads, carried out in tabs on allowed domains.
@@ -34,7 +35,9 @@ on your own computer. This policy covers the extension.
 ## Your control
 
 - Only domains you put on the allow list are ever touched; Chrome asks you to
-  grant access to each.
+  grant access to each. The one exception is the "Accept .test hosts" switch,
+  off by default: turned on, Chrome asks once for access to all `.test` sites,
+  and those become allowed as a whole until you turn it off.
 - Recording can be switched off on the **Recorded sessions** page, where
   sessions can also be deleted one at a time or all together.
 - Removing the extension deletes everything it stored.

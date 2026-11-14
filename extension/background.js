@@ -4,15 +4,26 @@
 
 importScripts("recorder.js");
 
-const DEFAULTS = { domains: [], port: 47831, token: "" };
+const DEFAULTS = { domains: [], port: 47831, token: "", acceptTest: false };
+
+// "Accept .test hosts": the whole .test TLD (RFC 2606, reserved for local
+// development, so stands like senge.test) counts as one allow-list entry, off
+// by default. Like a listed domain it counts only while Chrome holds the host
+// permission for it; the options page grants and removes both together.
+const TEST_TLD = "test";
+const TEST_ORIGIN = "*://*.test/*";
 
 // The tab the last command acted on, and whether it typed into a secret field:
 // what recordStep needs after the answer has gone out. Reset per command.
 let recTabId = null;
 let recSecret = false;
 
+// The allow list every check below uses: the listed domains, plus the .test TLD
+// when the switch is on and Chrome still holds its host permission.
 async function config() {
-  return await chrome.storage.local.get(DEFAULTS);
+  const c = await chrome.storage.local.get(DEFAULTS);
+  const test = c.acceptTest && (await chrome.permissions.contains({ origins: [TEST_ORIGIN] }));
+  return { ...c, domains: test ? [...c.domains, TEST_TLD] : c.domains };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -310,7 +321,7 @@ async function handle(cmd, c) {
     return { ok: true, note: "the extension is reloading — give it a few seconds" };
   }
   if (cmd.action === "status" && !cmd.domain) {
-    return { ok: true, allowed: c.domains };
+    return { ok: true, allowed: c.domains.map((d) => (d === TEST_TLD ? "*.test" : d)) };
   }
   if (cmd.action === "session") {
     return await sessionCommand(cmd);

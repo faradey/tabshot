@@ -28,7 +28,7 @@ What it can do in an allowed tab: click at a point, type text, press keys, scrol
 
 How it works
 • You run the free, open-source tabshot command-line program (github.com/faradey/tabshot). It listens on 127.0.0.1 only and creates a token.
-• Paste the token into the extension's options and list the domains it may touch. Chrome asks you to grant access to exactly those domains.
+• Paste the token into the extension's options and list the domains it may touch. Chrome asks you to grant access to exactly those domains. Local stands on `.test` can instead be allowed as a whole with the "Accept .test hosts" switch, which is off by default.
 • Click the tabshot icon on a tab to share it. Commands run in a separate, unfocused window tabshot opens itself — your own tab is never moved.
 
 Every command is recorded in the extension with a picture of the tab after it, so you can watch back what was done or download it as a video. Recordings never leave your browser; text typed into password and card fields is kept as its length only.
@@ -71,6 +71,7 @@ Let a program on the user's own computer take screenshots of, and click, type an
 | `debugger` | Off by default, behind the "Capture covered windows" option. When on and a normal capture fails or returns a stale frame because the window is covered, it attaches to that one allowed tab, sends only `Page.captureScreenshot`, and detaches. Chrome does not allow `debugger` as an optional permission. |
 | Host `http://127.0.0.1/*` | The extension talks only to the tabshot program on the user's own computer. |
 | Optional hosts `*://*/*` | Requested per domain, at runtime, for exactly the domains the user types into the allow list; removed when a domain is removed. |
+| Optional host `*://*.test/*` | Only if the user ticks "Accept .test hosts" (off by default): all `.test` sites, the reserved TLD for local development. Requested when ticked, removed when unticked. The extension still acts only on the allow list, which then includes `.test`. |
 | Optional `<all_urls>` | Only if the user ticks "Capture without a click": `captureVisibleTab` accepts `<all_urls>` as the alternative to a click. The extension still acts only on the allow list. |
 
 **Remote code:** No, I am not using remote code. (All scripts are in the package; injected functions are local functions passed to `chrome.scripting.executeScript`.)

@@ -21,7 +21,8 @@ back or download as a video. Stored in this browser only.</span></p>
 <p class="hint">The command line may ask for a screenshot of a tab on one of these
 domains and click, type, scroll or refresh in it. It never receives page text,
 DOM, cookies or URLs — only the picture and yes/no. Any domain not listed here
-is refused before a tab is even looked for.</p>
+(and no <code>.test</code> host, unless the switch below is on) is refused before
+a tab is even looked for.</p>
 
 <label>Allowed domains <span class="hint">(one per line; sub-domains of a listed domain are included)</span></label>
 <textarea id="domains" placeholder="admin.example.com&#10;app.example.net"></textarea>
@@ -41,6 +42,15 @@ photographed with no click. Chrome will list the extension as able to read and
 change data on all websites; what it acts on is still only the allow list
 above, checked by this extension's own code. Turn it off to give the access
 back.</p>
+
+<label><input id="acceptTest" type="checkbox" style="width:auto;margin-right:8px">Accept .test hosts</label>
+<p class="hint">Off by default. <code>.test</code> is reserved for local development
+(RFC 2606), and stands such as <code>senge.test</code> usually resolve only on this
+machine. Turned on, this asks Chrome once for access to every <code>*.test</code>
+site, and any such host can be named on the command line without being listed
+above: screenshots, clicks, typing and file uploads then reach whichever
+<code>.test</code> tab the command names, as they do for listed domains. Turn it
+off to give the access back.</p>
 
 <div id="covered-block">
 <label><input id="covered" type="checkbox" style="width:auto;margin-right:8px">Capture covered windows</label>
